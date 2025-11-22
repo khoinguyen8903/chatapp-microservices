@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/authdb?options=-c%20timezone=Asia/Ho_Chi_Minh
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:123456}
+logging:
+  level:
+    com.chatapp.api_gateway.util: INFO
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: Asia/Ho_Chi_Minh
+jwt:
+  secret: "${JWT_SECRET}"
+  expiration-ms: 86400000

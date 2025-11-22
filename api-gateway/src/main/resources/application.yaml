@@ -1,0 +1,54 @@
+server:
+  port: 8080
+
+logging:
+  level:
+    com.chatapp.api_gateway.util: INFO
+
+spring: # Chỉ xuất hiện MỘT lần duy nhất
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      # Cấu hình CORS để Frontend gọi được API
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+
+      routes:
+        # 1. AUTH SERVICE
+        - id: auth-service
+          uri: http://auth-service:8080
+          predicates:
+            - Path=/api/auth/**
+
+        # 2. CHAT SERVICE (HTTP)
+        - id: chat-service
+          uri: http://chat-service:8082
+          predicates:
+            - Path=/api/chat/**
+          filters:
+            - AuthenticationFilter
+
+        # 3. CHAT SERVICE (WEBSOCKET)
+        - id: chat-service-ws
+          uri: ws://chat-service:8082
+          predicates:
+            - Path=/ws/**
+          filters:
+            - AuthenticationFilter
+
+# Cấu hình JWT
+jwt:
+  secret: "${JWT_SECRET}"
+
+# Tắt Eureka Client
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false

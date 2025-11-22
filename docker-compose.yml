@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # --- API GATEWAY (Cổng chính) ---
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080" # Gateway chiếm cổng chính 8080
+    networks:
+      - app-network
+    depends_on:
+      - auth-service
+    environment:
+      JWT_SECRET: "mysecretkey123456789012345678901234"  # Secret key dùng cho JWT
+      JWT_EXPIRATION_MS: 86400000
+
+  # --- AUTH SERVICE ---
+  auth-service:
+    build: ./auth-service 
+    container_name: auth-service
+    ports:
+      - "8081:8080" # Cổng Host -> Cổng container
+    networks:
+      - app-network
+    depends_on:
+      - postgres-db
+    environment:
+      # Database Config
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/authdb?options=-c%20timezone=Asia/Ho_Chi_Minh
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: 123456
+      # Service Port
+      SERVER_PORT: 8080
+      # JWT Config
+      JWT_SECRET: "mysecretkey123456789012345678901234"
+      JWT_EXPIRATION_MS: 86400000
+
+  # --- DATABASE ---
+  postgres-db:
+    image: postgres:15
+    container_name: postgres-db
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+    environment:
+      POSTGRES_DB: authdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+# --- NETWORKS & VOLUMES ---
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
