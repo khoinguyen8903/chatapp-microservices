@@ -5,13 +5,11 @@ logging:
   level:
     com.chatapp.api_gateway.util: INFO
 
-spring: # Chỉ xuất hiện MỘT lần duy nhất
+spring:
   application:
     name: api-gateway
-
   cloud:
     gateway:
-      # Cấu hình CORS để Frontend gọi được API
       globalcors:
         cors-configurations:
           '[/**]':
@@ -22,9 +20,11 @@ spring: # Chỉ xuất hiện MỘT lần duy nhất
       routes:
         # 1. AUTH SERVICE
         - id: auth-service
-          uri: http://auth-service:8080
+          uri: http://auth-service:8081 # Đúng (vì Auth Service đã sửa thành 8081)
           predicates:
             - Path=/api/auth/**
+          filters:
+            - StripPrefix=1 # <--- THÊM VÀO: Biến /api/auth thành /auth
 
         # 2. CHAT SERVICE (HTTP)
         - id: chat-service
@@ -33,22 +33,19 @@ spring: # Chỉ xuất hiện MỘT lần duy nhất
             - Path=/api/chat/**
           filters:
             - AuthenticationFilter
+            - StripPrefix=1 # <--- THÊM VÀO
 
-        # 3. CHAT SERVICE (WEBSOCKET)
+        # 3. CHAT SERVICE (WS)
         - id: chat-service-ws
           uri: ws://chat-service:8082
           predicates:
             - Path=/ws/**
-          filters:
-            - AuthenticationFilter
+            # filters:
+            # - AuthenticationFilter (Tạm đóng khi dev để dễ test socket)
 
-# Cấu hình JWT
 jwt:
   secret: "${JWT_SECRET}"
 
-# Tắt Eureka Client
 eureka:
   client:
     enabled: false
-    register-with-eureka: false
-    fetch-registry: false
