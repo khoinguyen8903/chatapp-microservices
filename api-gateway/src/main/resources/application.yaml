@@ -4,47 +4,48 @@ server:
 logging:
   level:
     com.chatapp.api_gateway.util: INFO
+    org.springframework.cloud.gateway: INFO
 
 spring:
   application:
     name: api-gateway
   cloud:
     gateway:
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOrigins: "*"
-            allowedMethods: "*"
-            allowedHeaders: "*"
+      # --- QUAN TRỌNG: ĐÃ XÓA PHẦN globalcors ---
+      # Lý do: Chúng ta đã có file Java (CorsConfig) xử lý việc này.
+      # Nếu để lại ở đây sẽ gây lỗi trùng lặp cấu hình.
 
       routes:
         # 1. AUTH SERVICE
         - id: auth-service
-          uri: http://auth-service:8081 # Đúng (vì Auth Service đã sửa thành 8081)
+          uri: http://auth-service:8081
           predicates:
             - Path=/api/auth/**
           filters:
-            - StripPrefix=1 # <--- THÊM VÀO: Biến /api/auth thành /auth
+            - StripPrefix=1
 
-        # 2. CHAT SERVICE (HTTP)
-        - id: chat-service
+        # 2. CHAT SERVICE - REST API (Lấy lịch sử)
+        - id: chat-service-api
           uri: http://chat-service:8082
           predicates:
-            - Path=/api/chat/**
+            - Path=/messages/**
           filters:
             - AuthenticationFilter
-            - StripPrefix=1 # <--- THÊM VÀO
+            # Lọc bỏ header trùng nếu API backend lỡ gửi kèm
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
-        # 3. CHAT SERVICE (WS)
+        # 3. CHAT SERVICE - WEBSOCKET (Chat Realtime)
         - id: chat-service-ws
-          uri: ws://chat-service:8082
+          uri: http://chat-service:8082 # Giữ nguyên http để Gateway tự upgrade
           predicates:
             - Path=/ws/**
-            # filters:
-            # - AuthenticationFilter (Tạm đóng khi dev để dễ test socket)
+          filters:
+            # --- CÔNG THỨC CHỮA LỖI "MULTIPLE VALUES" ---
+            # Ý nghĩa: Nếu thấy header bị trùng (do cả Gateway và Service cùng thêm), giữ lại cái đầu tiên
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
 jwt:
-  secret: "${JWT_SECRET}"
+  secret: "mysecretkey123456789012345678901234"
 
 eureka:
   client:

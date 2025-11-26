@@ -1,0 +1,15 @@
+server:
+  port: 8082 # Chạy cổng 8082 (Khác với Auth 8080 và Gateway 8080)
+
+spring:
+  application:
+    name: chat-service
+  data:
+    mongodb:
+      # Kết nối tới container mongo tên là 'chat-mongo' (sẽ cấu hình trong docker-compose)
+      uri: mongodb://chat-mongo:27017/chatdb
+      auto-index-creation: true
+
+logging:
+  level:
+    org.springframework.web.socket: INFO

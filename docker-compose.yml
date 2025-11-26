@@ -11,6 +11,7 @@ services:
       - app-network
     depends_on:
       - auth-service
+      - chat-service # Thêm dependency này
     environment:
       JWT_SECRET: "mysecretkey123456789012345678901234"
       JWT_EXPIRATION_MS: 86400000
@@ -20,7 +21,7 @@ services:
     build: ./auth-service 
     container_name: auth-service
     ports:
-      - "8081:8081" # Map cổng 8081 ngoài vào 8081 trong
+      - "8081:8081" 
     networks:
       - app-network
     depends_on:
@@ -29,11 +30,11 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/authdb?options=-c%20timezone=Asia/Ho_Chi_Minh
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: 123456
-      SERVER_PORT: 8081  # <--- SỬA LẠI: Chạy ở cổng 8081 cho khớp Gateway
+      SERVER_PORT: 8081
       JWT_SECRET: "mysecretkey123456789012345678901234"
       JWT_EXPIRATION_MS: 86400000
 
-  # --- DATABASE ---
+  # --- AUTH DATABASE (Postgres) ---
   postgres-db:
     image: postgres:15
     container_name: postgres-db
@@ -48,9 +49,40 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # ==========================================
+  # PHẦN MỚI CẦN THÊM CHO CHAT SERVICE
+  # ==========================================
+  
+  # --- CHAT SERVICE ---
+  chat-service:
+    build: ./chat-service  # Trỏ đúng thư mục code chat
+    container_name: chat-service
+    ports:
+      - "8082:8082"
+    networks:
+      - app-network
+    depends_on:
+      - chat-mongo
+    environment:
+      SERVER_PORT: 8082
+      # Lưu ý: Trong Docker phải dùng tên container 'chat-mongo', không dùng localhost
+      SPRING_DATA_MONGODB_URI: mongodb://chat-mongo:27017/chatdb
+
+  # --- CHAT DATABASE (MongoDB) ---
+  chat-mongo:
+    image: mongo:6.0
+    container_name: chat-mongo
+    ports:
+      - "27017:27017"
+    networks:
+      - app-network
+    volumes:
+      - chat_mongo_data:/data/db
+
 networks:
   app-network:
     driver: bridge
 
 volumes:
   postgres_data:
+  chat_mongo_data: # Volume mới cho Mongo
