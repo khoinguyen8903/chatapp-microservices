@@ -20,18 +20,24 @@ public class JwtService {
     private final long expirationMs;
     private final String secretRaw;
 
+    // Constructor Injection từ file application.yml
     public JwtService(@Value("${jwt.secret}") String secret,
                       @Value("${jwt.expiration-ms}") long expirationMs) {
 
-        this.secretRaw = secret;
-        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        // --- QUAN TRỌNG: Cắt bỏ khoảng trắng thừa ---
+        // Nếu secret null thì gán rỗng để tránh NullPointer (dù ít khi xảy ra)
+        this.secretRaw = (secret != null) ? secret.trim() : "";
+
+        // Tạo Key từ chuỗi đã làm sạch
+        this.key = Keys.hmacShaKeyFor(this.secretRaw.getBytes(StandardCharsets.UTF_8));
         this.expirationMs = expirationMs;
     }
 
     @PostConstruct
-    public void printSecret() {
-        // Thêm tiền tố [AUTH SERVICE] để dễ so sánh
-        log.info("🔐 [AUTH SERVICE] Secret Loaded: {}", secretRaw);
+    public void printSecretDebug() {
+        // Log độ dài để so sánh với Gateway. Nếu độ dài khác nhau -> Lệch Key.
+        log.info("🔐 [AUTH SERVICE] Secret Loaded. Length: {}", secretRaw.length());
+        log.info("🔐 [AUTH SERVICE] Secret First 3 chars: {}", secretRaw.substring(0, Math.min(secretRaw.length(), 3)));
     }
 
     public String generateToken(User user) {

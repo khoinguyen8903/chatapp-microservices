@@ -4,6 +4,7 @@ import com.chatapp.chat_service.model.ChatRoom;
 import com.chatapp.chat_service.repository.ChatRoomRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import java.util.List;
 
 import java.util.Optional;
 
@@ -31,5 +32,10 @@ public class ChatRoomService {
 
                     return Optional.of(chatId);
                 });
+
+    }
+    public List<ChatRoom> getChatRooms(String senderId) {
+
+        return chatRoomRepository.findBySenderId(senderId);
     }
 }

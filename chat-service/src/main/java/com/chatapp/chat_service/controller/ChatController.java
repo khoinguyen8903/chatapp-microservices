@@ -1,8 +1,10 @@
 package com.chatapp.chat_service.controller;
 
 import com.chatapp.chat_service.model.ChatMessage;
-import com.chatapp.chat_service.model.ChatNotification; // Đã có file này nên Import OK
+import com.chatapp.chat_service.model.ChatNotification;
+import com.chatapp.chat_service.model.ChatRoom;
 import com.chatapp.chat_service.service.ChatMessageService;
+import com.chatapp.chat_service.service.ChatRoomService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -19,6 +21,9 @@ public class ChatController {
 
     @Autowired private SimpMessagingTemplate messagingTemplate;
     @Autowired private ChatMessageService chatMessageService;
+
+    // --- BƯỚC 1: THÊM DÒNG NÀY (Inject ChatRoomService) ---
+    @Autowired private ChatRoomService chatRoomService;
 
     // WebSocket: Nhận tin nhắn -> Lưu DB -> Bắn Notification cho người nhận
     @MessageMapping("/chat")
@@ -43,5 +48,11 @@ public class ChatController {
     public ResponseEntity<List<ChatMessage>> findChatMessages(@PathVariable String senderId,
                                                               @PathVariable String recipientId) {
         return ResponseEntity.ok(chatMessageService.findChatMessages(senderId, recipientId));
+    }
+
+    @GetMapping("/rooms/{userId}")
+    public ResponseEntity<List<ChatRoom>> getChatRooms(@PathVariable String userId) {
+        // --- BƯỚC 2: SỬA LẠI DÒNG NÀY ---
+        return ResponseEntity.ok(chatRoomService.getChatRooms(userId));
     }
 }

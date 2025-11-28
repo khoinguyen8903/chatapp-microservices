@@ -11,37 +11,39 @@ spring:
     name: api-gateway
   cloud:
     gateway:
-      # --- QUAN TRỌNG: ĐÃ XÓA PHẦN globalcors ---
-      # Lý do: Chúng ta đã có file Java (CorsConfig) xử lý việc này.
-      # Nếu để lại ở đây sẽ gây lỗi trùng lặp cấu hình.
-
       routes:
-        # 1. AUTH SERVICE
+        # 1. AUTH SERVICE (Đã bỏ StripPrefix)
         - id: auth-service
           uri: http://auth-service:8081
           predicates:
             - Path=/api/auth/**
           filters:
-            - StripPrefix=1
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
-        # 2. CHAT SERVICE - REST API (Lấy lịch sử)
-        - id: chat-service-api
+        # 2. CHAT SERVICE - Lấy tin nhắn
+        - id: chat-service-messages
           uri: http://chat-service:8082
           predicates:
             - Path=/messages/**
           filters:
             - AuthenticationFilter
-            # Lọc bỏ header trùng nếu API backend lỡ gửi kèm
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
-        # 3. CHAT SERVICE - WEBSOCKET (Chat Realtime)
+        # 3. CHAT SERVICE - Lấy danh sách phòng
+        - id: chat-service-rooms
+          uri: http://chat-service:8082
+          predicates:
+            - Path=/rooms/**
+          filters:
+            - AuthenticationFilter
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+
+        # 4. CHAT SERVICE - WebSocket
         - id: chat-service-ws
-          uri: http://chat-service:8082 # Giữ nguyên http để Gateway tự upgrade
+          uri: http://chat-service:8082
           predicates:
             - Path=/ws/**
           filters:
-            # --- CÔNG THỨC CHỮA LỖI "MULTIPLE VALUES" ---
-            # Ý nghĩa: Nếu thấy header bị trùng (do cả Gateway và Service cùng thêm), giữ lại cái đầu tiên
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
 jwt:
