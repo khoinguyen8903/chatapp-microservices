@@ -11,7 +11,7 @@ services:
       - app-network
     depends_on:
       - auth-service
-      - chat-service # Thêm dependency này
+      - chat-service
     environment:
       JWT_SECRET: "mysecretkey123456789012345678901234"
       JWT_EXPIRATION_MS: 86400000
@@ -49,13 +49,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # ==========================================
-  # PHẦN MỚI CẦN THÊM CHO CHAT SERVICE
-  # ==========================================
-  
   # --- CHAT SERVICE ---
   chat-service:
-    build: ./chat-service  # Trỏ đúng thư mục code chat
+    build: ./chat-service
     container_name: chat-service
     ports:
       - "8082:8082"
@@ -65,7 +61,6 @@ services:
       - chat-mongo
     environment:
       SERVER_PORT: 8082
-      # Lưu ý: Trong Docker phải dùng tên container 'chat-mongo', không dùng localhost
       SPRING_DATA_MONGODB_URI: mongodb://chat-mongo:27017/chatdb
 
   # --- CHAT DATABASE (MongoDB) ---
@@ -79,10 +74,23 @@ services:
     volumes:
       - chat_mongo_data:/data/db
 
+  # --- FRONTEND (Angular) ---
+  # Đặt đúng vị trí trong 'services', ngang hàng với các service khác
+  frontend:
+    build: ./chat-client
+    container_name: chat-frontend
+    ports:
+      - "3000:80"
+    networks:
+      - app-network
+    depends_on:
+      - api-gateway
+
+# --- NETWORKS & VOLUMES (Ở cuối file) ---
 networks:
   app-network:
     driver: bridge
 
 volumes:
   postgres_data:
-  chat_mongo_data: # Volume mới cho Mongo
+  chat_mongo_data:
