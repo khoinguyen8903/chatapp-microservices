@@ -1,0 +1,107 @@
+/* Import Tailwind directives để @apply hoạt động */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.login-wrapper {
+  @apply min-h-screen flex items-center justify-center p-4 relative overflow-hidden;
+  background: linear-gradient(135deg, #eef2f3 0%, #8e9eab 100%); /* Màu nền Gradient xám xanh nhẹ */
+}
+
+/* Các hình khối trang trí background */
+.shape {
+  @apply absolute rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse;
+}
+.shape-1 {
+  @apply bg-blue-300 w-72 h-72 top-[-20px] left-[-20px];
+  animation-duration: 7s;
+}
+.shape-2 {
+  @apply bg-purple-300 w-72 h-72 bottom-[-20px] right-[-20px];
+  animation-duration: 10s;
+}
+
+/* Thẻ chứa Form chính */
+.login-card {
+  @apply bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl w-full max-w-md p-8 relative z-10 border border-white/50 transform transition-all hover:scale-[1.01];
+}
+
+/* Phần Header */
+.logo-container {
+  @apply w-16 h-16 bg-gradient-to-tr from-blue-600 to-indigo-500 rounded-2xl mx-auto flex items-center justify-center shadow-lg mb-4 text-white text-2xl transform transition-transform duration-500 hover:rotate-12;
+}
+.title {
+  @apply text-3xl font-bold text-gray-800 tracking-tight;
+}
+.subtitle {
+  @apply text-gray-500 text-sm mt-2;
+}
+
+/* Các trường Input */
+.form-group {
+  @apply space-y-1;
+  
+  label {
+    @apply block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5 ml-1;
+  }
+}
+
+.input-wrapper {
+  @apply relative;
+  
+  .icon {
+    @apply absolute left-3 top-3 text-gray-400;
+  }
+  
+  .input-field {
+    @apply block w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 
+    focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400;
+  }
+
+  .password-toggle {
+    @apply absolute right-3 top-3 text-gray-400 hover:text-blue-600 focus:outline-none transition-colors;
+  }
+}
+
+/* Thông báo lỗi */
+.error-alert {
+  @apply bg-red-50 text-red-600 text-sm p-3 rounded-lg flex items-center gap-2 border border-red-100;
+}
+
+/* Nút Submit */
+.submit-btn {
+  @apply w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 
+  text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-500/30 transition-all active:scale-95 
+  disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 mt-4;
+}
+
+.spinner {
+  @apply animate-spin h-5 w-5 text-white;
+}
+
+/* Footer */
+.footer {
+  @apply mt-8 text-center text-sm text-gray-500 border-t border-gray-100 pt-6;
+  
+  .toggle-link {
+    @apply text-blue-600 font-bold hover:text-blue-700 hover:underline ml-1 focus:outline-none transition-colors;
+  }
+}
+
+/* Animations Keyframes */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+.animate-shake {
+  animation: shake 0.3s ease-in-out;
+}
