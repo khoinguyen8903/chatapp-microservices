@@ -1,42 +1,62 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, AbstractControl } from '@angular/forms'; // Import mới
 import { Router } from '@angular/router';
-import { AuthService, LoginRequest, RegisterRequest } from '../../services/auth.service';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, ReactiveFormsModule], // Đổi FormsModule thành ReactiveFormsModule
   templateUrl: './login.html',
   styleUrl: './login.scss'
 })
 export class Login {
-  // Trạng thái giao diện (Signals)
   isLoginMode = signal(true);
   isLoading = signal(false);
   showPassword = signal(false);
-  errorMessage = signal<string>('');
+  
+  // Form chính
+  authForm: FormGroup;
 
-  // Dữ liệu Form
-  formData = {
-    username: '',
-    password: '',
-    confirmPassword: '',
-    displayName: '', // Tên hiển thị
-    email: ''
-  };
+  // Global error message (lỗi chung không thuộc về field nào)
+  globalError = signal<string>('');
 
   constructor(
+    private fb: FormBuilder,
     private authService: AuthService,
     private router: Router
-  ) {}
+  ) {
+    // Khởi tạo Form với các validate khớp với Backend Java
+    this.authForm = this.fb.group({
+      username: ['', [
+        Validators.required, 
+        Validators.minLength(3), 
+        Validators.maxLength(20),
+        Validators.pattern('^[a-zA-Z0-9]*$') // Khớp với regex Backend
+      ]],
+      password: ['', [
+        Validators.required, 
+        Validators.minLength(6)
+      ]],
+      confirmPassword: [''], // Validate logic sau
+      displayName: ['', [Validators.maxLength(50)]],
+      email: ['', [Validators.email]]
+    });
+  }
 
-  // Chuyển đổi tab Login/Register
+  // Helper để lấy control ra check lỗi trong HTML cho ngắn gọn
+  get f() { return this.authForm.controls; }
+
   toggleMode() {
     this.isLoginMode.update(prev => !prev);
-    this.errorMessage.set(''); // Xóa lỗi cũ
-    this.resetForm();
+    this.globalError.set('');
+    this.authForm.reset();
+    
+    // Nếu chuyển sang Register, thêm validator required cho displayName/email nếu cần
+    if (!this.isLoginMode()) {
+       // Có thể thêm logic dynamic validation ở đây nếu muốn chặt chẽ hơn
+    }
   }
 
   togglePassword() {
@@ -44,84 +64,71 @@ export class Login {
   }
 
   onSubmit() {
-    this.errorMessage.set('');
-    
+    this.globalError.set('');
+
+    // 1. Validate Form chung
+    if (this.authForm.invalid) {
+      // Đánh dấu tất cả các trường là đã touch để hiển thị lỗi đỏ
+      this.authForm.markAllAsTouched(); 
+      return;
+    }
+
+    const val = this.authForm.value;
+
+    // 2. Xử lý Logic Login
     if (this.isLoginMode()) {
-      this.handleLogin();
-    } else {
-      this.handleRegister();
-    }
-  }
-
-  private handleLogin() {
-    if (!this.formData.username || !this.formData.password) {
-      this.errorMessage.set('Vui lòng nhập tài khoản và mật khẩu.');
-      return;
-    }
-
-    this.isLoading.set(true);
-    
-    const request: LoginRequest = {
-      username: this.formData.username,
-      password: this.formData.password
-    };
-
-    this.authService.login(request).subscribe({
-      next: (res) => {
-        this.isLoading.set(false);
-        // alert(`Xin chào ${res.displayName}!`);
-        // Chuyển hướng sang trang chat sau này
-        // this.router.navigate(['/chat']);
-      },
-      error: (err) => {
-        this.isLoading.set(false);
-        console.error(err);
-        this.errorMessage.set('Sai tài khoản hoặc mật khẩu.');
+      this.isLoading.set(true);
+      this.authService.login({ username: val.username, password: val.password }).subscribe({
+        next: (res) => {
+          this.isLoading.set(false);
+          // this.router.navigate(['/chat']);
+          alert('Login thành công!');
+        },
+        error: (err) => {
+          this.isLoading.set(false);
+          this.globalError.set('Sai tài khoản hoặc mật khẩu.');
+        }
+      });
+    } 
+    // 3. Xử lý Logic Register
+    else {
+      // Validate khớp password thủ công
+      if (val.password !== val.confirmPassword) {
+        this.authForm.get('confirmPassword')?.setErrors({ mismatch: true });
+        return;
       }
-    });
-  }
 
-  private handleRegister() {
-    // Validate
-    if (this.formData.password !== this.formData.confirmPassword) {
-      this.errorMessage.set('Mật khẩu xác nhận không khớp.');
-      return;
+      this.isLoading.set(true);
+      this.authService.register({
+        username: val.username,
+        password: val.password,
+        displayName: val.displayName || val.username, // Fallback nếu rỗng
+        email: val.email
+      }).subscribe({
+        next: () => {
+          this.isLoading.set(false);
+          alert('Đăng ký thành công!');
+          this.toggleMode();
+        },
+        error: (err) => {
+          this.isLoading.set(false);
+          
+          // XỬ LÝ LỖI TỪ BACKEND TRẢ VỀ (Map<String, String>)
+          if (err.status === 400 && err.error) {
+            const serverErrors = err.error; // {username: "...", password: "..."}
+            
+            // Map lỗi vào từng field cụ thể
+            Object.keys(serverErrors).forEach(key => {
+              const control = this.authForm.get(key);
+              if (control) {
+                control.setErrors({ serverError: serverErrors[key] });
+              }
+            });
+          } else {
+            this.globalError.set('Có lỗi xảy ra, vui lòng thử lại.');
+          }
+        }
+      });
     }
-    if (!this.formData.displayName || !this.formData.username) {
-      this.errorMessage.set('Vui lòng điền đầy đủ thông tin.');
-      return;
-    }
-
-    this.isLoading.set(true);
-
-    const request: RegisterRequest = {
-      username: this.formData.username,
-      password: this.formData.password,
-      displayName: this.formData.displayName,
-      email: this.formData.email
-    };
-
-    this.authService.register(request).subscribe({
-      next: () => {
-        this.isLoading.set(false);
-        alert('Đăng ký thành công! Vui lòng đăng nhập.');
-        this.toggleMode(); // Chuyển về login
-      },
-      error: (err) => {
-        this.isLoading.set(false);
-        const msg = err.error?.message || 'Đăng ký thất bại. Tên đăng nhập có thể đã tồn tại.';
-        this.errorMessage.set(msg);
-      }
-    });
-  }
-
-  private resetForm() {
-    this.formData = {
-      username: '',
-      password: '',
-      confirmPassword: '',
-      displayName: '',
-      email: ''
-    };
   }
 }

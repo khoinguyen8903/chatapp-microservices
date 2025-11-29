@@ -5,7 +5,7 @@
 
 .login-wrapper {
   @apply min-h-screen flex items-center justify-center p-4 relative overflow-hidden;
-  background: linear-gradient(135deg, #eef2f3 0%, #8e9eab 100%); /* Màu nền Gradient xám xanh nhẹ */
+  background: linear-gradient(135deg, #eef2f3 0%, #8e9eab 100%);
 }
 
 /* Các hình khối trang trí background */
@@ -21,9 +21,16 @@
   animation-duration: 10s;
 }
 
-/* Thẻ chứa Form chính */
+/* --- ĐÃ SỬA: Thẻ chứa Form chính --- */
 .login-card {
-  @apply bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl w-full max-w-md p-8 relative z-10 border border-white/50 transform transition-all hover:scale-[1.01];
+  /* BỎ: transform hover:scale-[1.01] để tránh bị mờ chữ */
+  /* GIỮ NGUYÊN: backdrop-blur và các style khác */
+  @apply bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl w-full max-w-md p-8 relative z-10 border border-white/50 transition-all duration-300;
+
+  /* THÊM: Hiệu ứng Hover mới - Sáng viền và đậm bóng đổ */
+  &:hover {
+    @apply border-blue-300 shadow-blue-500/20 shadow-2xl;
+  }
 }
 
 /* Phần Header */
