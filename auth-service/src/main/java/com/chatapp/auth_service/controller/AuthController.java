@@ -1,11 +1,11 @@
 package com.chatapp.auth_service.controller;
 
-
 import com.chatapp.auth_service.dto.LoginRequest;
 import com.chatapp.auth_service.dto.LoginResponse;
 import com.chatapp.auth_service.dto.RegisterRequest;
 import com.chatapp.auth_service.service.AuthService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus; // Import thêm
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -39,5 +39,18 @@ public class AuthController {
         String userId = String.valueOf(auth.getPrincipal());
         return ResponseEntity.ok().body("{\"userId\":\"" + userId + "\"}");
     }
-}
 
+    // --- MỚI THÊM: API kiểm tra user tồn tại ---
+    @GetMapping("/check/{username}")
+    public ResponseEntity<?> checkUserExists(@PathVariable String username) {
+        // Gọi service để kiểm tra (bạn cần đảm bảo AuthService đã có hàm existsByUsername)
+        boolean exists = svc.existsByUsername(username);
+
+        if (exists) {
+            return ResponseEntity.ok().body("{\"exists\": true}");
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("{\"error\": \"User not found\"}");
+        }
+    }
+}

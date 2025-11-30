@@ -66,4 +66,7 @@ export class AuthService {
     localStorage.clear();
     // Sau này có thể thêm router.navigate(['/login'])
   }
+  checkUserExists(username: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/check/${username}`);
+  }
 }

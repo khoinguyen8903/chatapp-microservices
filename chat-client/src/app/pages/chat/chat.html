@@ -1,0 +1,171 @@
+<div class="flex h-screen bg-gray-100 antialiased text-gray-800">
+  
+  <!-- SIDEBAR: DANH SÁCH USER -->
+  <div class="flex flex-col w-80 bg-white border-r border-gray-200 shadow-lg z-20">
+    
+    <!-- 1. Header Sidebar -->
+    <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-blue-600 text-white shadow-sm">
+      <div class="font-extrabold text-xl tracking-tight">
+        <i class="fas fa-comment-dots mr-2"></i> Chat App
+      </div>
+      <div class="text-xs font-medium bg-blue-700 px-2 py-1 rounded-full opacity-90">
+         {{ currentUser()?.username || 'Me' }}
+      </div>
+    </div>
+
+    <!-- 2. Ô TÌM KIẾM / TẠO CHAT MỚI -->
+    <div class="p-4 bg-gray-50 border-b border-gray-200">
+        <div class="relative group">
+            <input 
+                type="text" 
+                [(ngModel)]="userToChat" 
+                (keyup.enter)="startNewChat()"
+                placeholder="Nhập username..." 
+                class="w-full pl-9 pr-9 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all bg-white group-hover:border-blue-300"
+            >
+            <!-- Icon Search -->
+            <i class="fas fa-search absolute left-3 top-2.5 text-gray-400 group-hover:text-blue-500 transition-colors"></i>
+            
+            <!-- Nút Add (+) -->
+            <button 
+                (click)="startNewChat()"
+                [disabled]="!userToChat"
+                class="absolute right-1.5 top-1.5 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white w-7 h-7 rounded-md flex items-center justify-center transition-all disabled:opacity-0 disabled:cursor-not-allowed transform active:scale-90">
+                <i class="fas fa-plus text-xs"></i>
+            </button>
+        </div>
+    </div>
+    
+    <!-- 3. Danh sách phòng chat -->
+    <div class="overflow-y-auto flex-1 p-2 space-y-1 custom-scrollbar">
+      <!-- Trạng thái trống -->
+      @if (chatRooms().length === 0) {
+        <div class="flex flex-col items-center justify-center h-40 text-gray-400 text-sm italic px-4 text-center animate-fade-in">
+            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                <i class="fas fa-inbox text-2xl opacity-50"></i>
+            </div>
+            <p>Chưa có tin nhắn.</p>
+            <p class="text-xs mt-1 text-gray-500">Nhập username ở trên để bắt đầu!</p>
+        </div>
+      }
+
+      <!-- Loop danh sách -->
+      @for (room of chatRooms(); track room.chatId) {
+        <div 
+           (click)="onSelectUser(room)"
+           class="flex items-center p-3 rounded-xl cursor-pointer transition-all duration-200 group relative overflow-hidden"
+           [ngClass]="selectedUser()?.id === getRecipientId(room) 
+              ? 'bg-blue-50 border-blue-100 shadow-sm' 
+              : 'hover:bg-gray-50 border-transparent hover:shadow-sm'">
+          
+          <!-- Hiệu ứng hover line bên trái -->
+          <div class="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 transform -translate-x-full transition-transform duration-200"
+               [class.translate-x-0]="selectedUser()?.id === getRecipientId(room)"></div>
+          
+          <!-- Avatar (Lấy chữ cái đầu) -->
+          <div class="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md ring-2 ring-white">
+            {{ getRecipientId(room).charAt(0) | uppercase }}
+          </div>
+          
+          <div class="ml-3 truncate flex-1">
+            <div class="flex justify-between items-center">
+                <p class="font-bold text-gray-800 text-sm truncate group-hover:text-blue-700 transition-colors">
+                    {{ getRecipientId(room) }}
+                </p>
+            </div>
+            <p class="text-xs text-gray-500 truncate mt-0.5 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-gray-300 group-hover:bg-green-400 transition-colors"></span>
+                Bấm để xem tin nhắn
+            </p>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- MAIN CHAT: CỬA SỔ CHAT -->
+  <div class="flex flex-col flex-1 h-full relative bg-[#F0F2F5]">
+    
+    <!-- 1. Chat Header -->
+    <div class="h-16 bg-white border-b border-gray-200 flex items-center px-6 justify-between shadow-sm z-10">
+      @if (selectedUser()) {
+        <div class="flex items-center animate-fade-in">
+          <div class="relative">
+              <div class="w-10 h-10 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                 {{ selectedUser().name.charAt(0) | uppercase }}
+              </div>
+              <!-- Online Dot -->
+              <span class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
+          </div>
+          <div class="ml-3">
+              <h2 class="font-bold text-gray-800 text-base leading-tight">{{ selectedUser().name }}</h2>
+              <span class="text-xs text-green-600 font-medium flex items-center gap-1">
+                  Đang hoạt động
+              </span>
+          </div>
+        </div>
+      } @else {
+        <div class="flex items-center text-gray-400 italic font-medium">
+            <i class="fas fa-arrow-left mr-2 animate-bounce-x"></i>
+            Chọn một người dùng để bắt đầu
+        </div>
+      }
+    </div>
+
+    <!-- 2. Message List Area -->
+    <div id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar scroll-smooth">
+      <!-- Màn hình chào mừng -->
+      @if (!selectedUser()) {
+          <div class="h-full flex flex-col items-center justify-center text-gray-400 animate-fade-in">
+              <div class="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center mb-4 opacity-50">
+                  <i class="fas fa-comments text-5xl text-gray-500"></i>
+              </div>
+              <p class="text-xl font-bold text-gray-500">Chào mừng đến với Chat App</p>
+              <p class="text-sm mt-2 opacity-75">Kết nối và trò chuyện ngay lập tức.</p>
+          </div>
+      }
+
+      <!-- Danh sách tin nhắn -->
+      @for (msg of messages(); track msg.id) {
+        <div class="flex w-full animate-slide-up" [ngClass]="{'justify-end': msg.senderId === currentUser().id}">
+          <div class="max-w-[75%] px-4 py-2 shadow-sm text-[15px] relative group transition-all hover:shadow-md"
+               [ngClass]="msg.senderId === currentUser().id 
+                  ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm' 
+                  : 'bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-tl-sm'">
+            
+            <p class="leading-relaxed whitespace-pre-wrap break-words">{{ msg.content }}</p>
+            
+            <span class="text-[10px] mt-1 block opacity-70 font-medium tracking-wide" 
+                  [ngClass]="{'text-blue-100 text-right': msg.senderId === currentUser().id, 'text-gray-400': msg.senderId !== currentUser().id}">
+                {{ msg.timestamp | date:'HH:mm' }}
+            </span>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- 3. Input Area -->
+    <div class="p-4 bg-white border-t border-gray-200">
+      <div class="flex gap-3 items-end max-w-5xl mx-auto">
+        <div class="flex-1 relative">
+            <input 
+              type="text" 
+              [(ngModel)]="newMessage" 
+              (keyup.enter)="sendMessage()"
+              placeholder="Nhập tin nhắn..." 
+              class="w-full bg-gray-100 border border-transparent rounded-full px-5 py-3 focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent transition-all outline-none text-gray-700 placeholder-gray-500"
+              [disabled]="!selectedUser()"
+            >
+        </div>
+        
+        <button 
+          (click)="sendMessage()" 
+          [disabled]="!newMessage.trim() || !selectedUser()"
+          class="bg-blue-600 hover:bg-blue-700 text-white rounded-full w-12 h-12 flex items-center justify-center transition-all shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:shadow-none hover:scale-110 active:scale-95">
+          <i class="fas fa-paper-plane text-lg ml-0.5"></i>
+        </button>
+      </div>
+    </div>
+    
+  </div>
+</div>

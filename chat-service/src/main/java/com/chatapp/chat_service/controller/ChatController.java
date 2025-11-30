@@ -15,23 +15,36 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
 import java.util.List;
+import java.util.Optional;
 
 @Controller
 public class ChatController {
 
     @Autowired private SimpMessagingTemplate messagingTemplate;
     @Autowired private ChatMessageService chatMessageService;
-
-    // --- BƯỚC 1: THÊM DÒNG NÀY (Inject ChatRoomService) ---
     @Autowired private ChatRoomService chatRoomService;
 
-    // WebSocket: Nhận tin nhắn -> Lưu DB -> Bắn Notification cho người nhận
     @MessageMapping("/chat")
     public void processMessage(@Payload ChatMessage chatMessage) {
-        // 1. Lưu toàn bộ thông tin vào DB
+        // 1. Kiểm tra và tạo ChatRoom nếu chưa tồn tại
+
+        // Tạo ChatRoom cho Người Gửi (Sender) -> Gọi đúng tên hàm getChatRoomId
+        Optional<String> chatIdSender = chatRoomService.getChatRoomId(
+                chatMessage.getSenderId(), chatMessage.getRecipientId(), true);
+
+        // Tạo ChatRoom cho Người Nhận (Recipient) -> Gọi đúng tên hàm getChatRoomId
+        Optional<String> chatIdRecipient = chatRoomService.getChatRoomId(
+                chatMessage.getRecipientId(), chatMessage.getSenderId(), true);
+
+        // Gán chatId vào tin nhắn để lưu vết
+        if (chatIdSender.isPresent()) {
+            chatMessage.setChatId(chatIdSender.get());
+        }
+
+        // 2. Lưu tin nhắn
         ChatMessage savedMsg = chatMessageService.save(chatMessage);
 
-        // 2. Chỉ gửi thông báo (Notification) gọn nhẹ cho người nhận
+        // 3. Gửi thông báo real-time
         messagingTemplate.convertAndSendToUser(
                 chatMessage.getRecipientId(), "/queue/messages",
                 ChatNotification.builder()
@@ -43,7 +56,6 @@ public class ChatController {
         );
     }
 
-    // REST API: Lấy lịch sử thì trả về đầy đủ ChatMessage
     @GetMapping("/messages/{senderId}/{recipientId}")
     public ResponseEntity<List<ChatMessage>> findChatMessages(@PathVariable String senderId,
                                                               @PathVariable String recipientId) {
@@ -52,7 +64,6 @@ public class ChatController {
 
     @GetMapping("/rooms/{userId}")
     public ResponseEntity<List<ChatRoom>> getChatRooms(@PathVariable String userId) {
-        // --- BƯỚC 2: SỬA LẠI DÒNG NÀY ---
         return ResponseEntity.ok(chatRoomService.getChatRooms(userId));
     }
 }

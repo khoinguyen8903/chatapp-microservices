@@ -32,12 +32,14 @@
     "@stomp/rx-stomp": "^2.3.0",
     "rxjs": "~7.8.0",
     "sockjs-client": "^1.6.1",
+    "stompjs": "^2.3.3",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
     "@angular/build": "^21.0.1",
     "@angular/cli": "^21.0.1",
     "@angular/compiler-cli": "^21.0.0",
+    "@types/sockjs-client": "^1.5.4",
     "autoprefixer": "^10.4.22",
     "jsdom": "^27.1.0",
     "postcss": "^8.5.6",

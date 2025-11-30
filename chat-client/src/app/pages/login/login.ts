@@ -1,15 +1,15 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, AbstractControl } from '@angular/forms'; // Import mới
+import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule], // Đổi FormsModule thành ReactiveFormsModule
+  imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './login.html',
-  styleUrl: './login.scss'
+  styleUrls: ['./login.scss']
 })
 export class Login {
   isLoginMode = signal(true);
@@ -81,8 +81,8 @@ export class Login {
       this.authService.login({ username: val.username, password: val.password }).subscribe({
         next: (res) => {
           this.isLoading.set(false);
-          // this.router.navigate(['/chat']);
-          alert('Login thành công!');
+          // --- SỬA Ở ĐÂY: Chuyển hướng sang trang Chat ---
+          this.router.navigate(['/chat']); 
         },
         error: (err) => {
           this.isLoading.set(false);
@@ -107,8 +107,8 @@ export class Login {
       }).subscribe({
         next: () => {
           this.isLoading.set(false);
-          alert('Đăng ký thành công!');
-          this.toggleMode();
+          alert('Đăng ký thành công! Vui lòng đăng nhập.');
+          this.toggleMode(); // Chuyển về tab đăng nhập để người dùng login
         },
         error: (err) => {
           this.isLoading.set(false);

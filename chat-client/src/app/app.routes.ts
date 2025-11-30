@@ -1,14 +1,17 @@
 import { Routes } from '@angular/router';
-// Import Component Login (Đảm bảo đường dẫn đúng tới file login.ts của bạn)
-import { Login } from './pages/login/login'; 
+import { Login } from './pages/login/login'; // Import Component Login
+import { Chat } from './pages/chat/chat';     // Import Component Chat
 
 export const routes: Routes = [
-  // 1. Khi đường dẫn là 'login' -> Hiển thị trang Login
+  // Mặc định vào trang Login
+  { path: '', redirectTo: 'login', pathMatch: 'full' },
+  
+  // Đường dẫn trang Login
   { path: 'login', component: Login },
   
-  // 2. Khi đường dẫn trống (trang chủ) -> Tự động chuyển hướng sang 'login'
-  { path: '', redirectTo: '/login', pathMatch: 'full' },
-
-  // 3. (Tùy chọn) Nếu nhập đường dẫn linh tinh -> Cũng chuyển về login
-  { path: '**', redirectTo: '/login' }
+  // Đường dẫn trang Chat
+  { path: 'chat', component: Chat },
+  
+  // (Tùy chọn) Chặn trang lỗi 404 quay về login
+  { path: '**', redirectTo: 'login' }
 ];
