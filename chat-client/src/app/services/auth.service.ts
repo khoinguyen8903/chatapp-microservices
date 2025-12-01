@@ -4,7 +4,6 @@ import { Observable, tap } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 // --- ĐỊNH NGHĨA MODELS (DTO) ---
-// Giúp code không bị sai tên trường so với Backend
 export interface AuthResponse {
   token: string;
   userId: string;
@@ -20,7 +19,7 @@ export interface LoginRequest {
 export interface RegisterRequest {
   username: string;
   password: string;
-  displayName: string; // Khớp với Backend Java
+  displayName: string;
   email: string;
 }
 
@@ -28,6 +27,7 @@ export interface RegisterRequest {
   providedIn: 'root'
 })
 export class AuthService {
+  // Lưu ý: Đảm bảo environment.apiUrl là 'http://localhost:8080' (hoặc cổng gateway của bạn)
   private apiUrl = `${environment.apiUrl}/api/auth`;
 
   constructor(private http: HttpClient) { }
@@ -48,7 +48,7 @@ export class AuthService {
     return this.http.post<AuthResponse>(`${this.apiUrl}/register`, request);
   }
 
-  // 3. Quản lý Session (Lưu trữ Token)
+  // 3. Quản lý Session
   private saveSession(data: AuthResponse) {
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify({
@@ -64,9 +64,16 @@ export class AuthService {
 
   logout() {
     localStorage.clear();
-    // Sau này có thể thêm router.navigate(['/login'])
   }
+
+  // 4. Kiểm tra user tồn tại (Dùng khi tìm kiếm username để tạo chat)
   checkUserExists(username: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/check/${username}`);
+  }
+
+  // 5. --- MỚI THÊM: Lấy thông tin user theo ID ---
+  // Hàm này được ChatComponent gọi để hiển thị tên đẹp thay vì UUID trong danh sách chat
+  getUserById(userId: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/users/${userId}`);
   }
 }

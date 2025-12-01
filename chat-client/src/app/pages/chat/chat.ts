@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
-import { ChatMessage, ChatRoom, TypingMessage } from '../../models/chat.models'; // Import thêm TypingMessage
+import { ChatMessage, ChatRoom, TypingMessage } from '../../models/chat.models';
 
 @Component({
   selector: 'app-chat',
@@ -25,16 +25,18 @@ export class Chat implements OnInit, OnDestroy {
   userToChat = ''; 
 
   // --- STATE CHO TÍNH NĂNG TYPING ---
-  isRecipientTyping = signal(false); // Người kia có đang gõ không?
-  private typingTimeout: any;        // Biến đếm ngược để dừng gõ
+  isRecipientTyping = signal(false); 
+  private typingTimeout: any;
   // ---------------------------------
+
+  // --- CACHE ĐỂ LƯU TÊN USER (Tránh gọi API nhiều lần) ---
+  private userCache = new Map<string, string>(); 
 
   constructor(
     private chatService: ChatService, 
     private authService: AuthService,
     private router: Router
   ) {
-    // Tự động cuộn xuống khi có tin nhắn mới HOẶC khi người kia đang gõ
     effect(() => {
       if (this.messages().length > 0 || this.isRecipientTyping()) {
         this.scrollToBottom();
@@ -48,23 +50,18 @@ export class Chat implements OnInit, OnDestroy {
       const user = JSON.parse(userStr);
       this.currentUser.set(user);
       
-      // 1. Kết nối Socket
       this.chatService.connect(this.currentUser());
-      
-      // 2. Tải danh sách phòng
       this.loadRooms();
 
-      // 3. Lắng nghe tin nhắn Chat
+      // 1. Lắng nghe tin nhắn
       this.chatService.onMessage().subscribe((msg) => {
         if (msg) {
           const currentSelected = this.selectedUser();
           if (currentSelected && (msg.senderId === currentSelected.id || msg.senderId === this.currentUser().id)) {
             this.messages.update(old => [...old, msg]);
-            // Nhận tin nhắn xong -> Chắc chắn họ đã dừng gõ -> Tắt typing
             this.isRecipientTyping.set(false);
           }
 
-          // Reload phòng nếu có người lạ nhắn
           const isNewContact = !this.chatRooms().some(r => 
              r.senderId === msg.senderId || r.recipientId === msg.senderId
           );
@@ -75,10 +72,9 @@ export class Chat implements OnInit, OnDestroy {
         }
       });
 
-      // 4. Lắng nghe sự kiện Typing (Đang gõ...)
+      // 2. Lắng nghe Typing
       this.chatService.onTyping().subscribe((typingMsg) => {
         const currentSelected = this.selectedUser();
-        // Chỉ hiện nếu người đang gõ đúng là người mình đang chat
         if (currentSelected && typingMsg.senderId === currentSelected.id) {
             this.isRecipientTyping.set(typingMsg.isTyping);
         }
@@ -89,9 +85,39 @@ export class Chat implements OnInit, OnDestroy {
     }
   }
 
+  // --- SỬA HÀM NÀY: Tải phòng và tự động lấy tên thật (Fix lỗi hiện UUID) ---
   loadRooms() {
     this.chatService.getChatRooms(this.currentUser().id).subscribe({
-      next: (rooms) => this.chatRooms.set(rooms),
+      next: (rooms) => {
+        this.chatRooms.set(rooms);
+        
+        // Duyệt qua từng phòng để lấy tên Username
+        rooms.forEach(room => {
+            const partnerId = this.getRecipientId(room);
+            
+            // Nếu chưa có tên hiển thị
+            if (!room.chatName) {
+                // Kiểm tra cache xem đã lấy chưa
+                if (this.userCache.has(partnerId)) {
+                    room.chatName = this.userCache.get(partnerId);
+                } else {
+                    // Gọi API lấy tên từ Auth Service
+                    this.authService.getUserById(partnerId).subscribe({
+                        next: (user: any) => {
+                            room.chatName = user.username; 
+                            this.userCache.set(partnerId, user.username);
+                            
+                            // Cập nhật lại danh sách để giao diện hiển thị tên mới
+                            this.chatRooms.update(current => [...current]);
+                        },
+                        error: () => {
+                            room.chatName = 'Unknown User';
+                        }
+                    });
+                }
+            }
+        });
+      },
       error: (err) => console.error('Lỗi tải phòng chat', err)
     });
   }
@@ -101,8 +127,6 @@ export class Chat implements OnInit, OnDestroy {
     const displayName = this.getDisplayName(room);
     
     this.selectedUser.set({ id: recipientId, name: displayName });
-    
-    // Reset trạng thái typing khi chuyển phòng
     this.isRecipientTyping.set(false);
     
     this.chatService.getChatMessages(this.currentUser().id, recipientId).subscribe(msgs => {
@@ -111,11 +135,10 @@ export class Chat implements OnInit, OnDestroy {
     });
   }
 
-  // --- HÀM XỬ LÝ KHI MÌNH GÕ PHÍM (Gọi từ HTML) ---
+  // Gửi sự kiện Typing
   onInputTyping() {
     if (!this.selectedUser()) return;
 
-    // Gửi sự kiện "Đang gõ" (True)
     const typingMsg: TypingMessage = {
         senderId: this.currentUser().id,
         recipientId: this.selectedUser().id,
@@ -123,7 +146,6 @@ export class Chat implements OnInit, OnDestroy {
     };
     this.chatService.sendTyping(typingMsg);
 
-    // Debounce: Nếu ngừng gõ sau 1.5s -> Gửi sự kiện "Dừng gõ" (False)
     if (this.typingTimeout) clearTimeout(this.typingTimeout);
 
     this.typingTimeout = setTimeout(() => {
@@ -136,12 +158,11 @@ export class Chat implements OnInit, OnDestroy {
     }, 1500);
   }
 
-  // --- TẠO PHÒNG CHAT MỚI (Logic chuẩn UUID) ---
+  // Tạo phòng mới
   startNewChat() {
     if (!this.userToChat.trim()) return;
     const usernameInput = this.userToChat.trim();
     
-    // Gọi API check user để lấy ID thật (UUID)
     this.authService.checkUserExists(usernameInput).subscribe({
       next: (res: any) => {
         const realRecipientId = res.userId; 
@@ -165,7 +186,6 @@ export class Chat implements OnInit, OnDestroy {
             return;
         }
 
-        // Tạo phòng với UUID
         const newRoom: ChatRoom = {
             id: 'temp_' + Date.now(),
             chatId: `${this.currentUser().id}_${realRecipientId}`,
@@ -199,13 +219,11 @@ export class Chat implements OnInit, OnDestroy {
       timestamp: new Date()
     };
 
-    // Kiểm tra mạng trước khi gửi
     const isSent = this.chatService.sendMessage(msg);
     
     if (isSent) {
         this.messages.update(old => [...old, msg]);
         this.newMessage = '';
-        // Gửi xong thì xóa timeout gõ phím
         if (this.typingTimeout) clearTimeout(this.typingTimeout);
     } else {
         alert('Không thể gửi tin nhắn. Vui lòng kiểm tra kết nối mạng!');
@@ -228,7 +246,5 @@ export class Chat implements OnInit, OnDestroy {
     }, 50);
   }
 
-  ngOnDestroy() {
-    // Có thể ngắt kết nối socket nếu muốn
-  }
+  ngOnDestroy() {}
 }

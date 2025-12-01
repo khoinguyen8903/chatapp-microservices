@@ -57,9 +57,13 @@ public class AuthService {
         return userRepository.findByUsername(username).isPresent();
     }
 
-    // --- MỚI THÊM: Hàm tìm user và trả về đối tượng User đầy đủ ---
-    // Hàm này được AuthController gọi để lấy userId
+    // Hàm tìm user theo username (trả về User)
     public User findUserByUsername(String username) {
         return userRepository.findByUsername(username).orElse(null);
+    }
+
+    // --- MỚI THÊM: Tìm user theo ID (Để frontend hiển thị tên thay vì UUID) ---
+    public User findUserById(String userId) {
+        return userRepository.findById(userId).orElse(null);
     }
 }

@@ -43,7 +43,7 @@ public class AuthController {
         return ResponseEntity.ok().body("{\"userId\":\"" + userId + "\"}");
     }
 
-    // --- ĐÃ CẬP NHẬT: Trả về userId thay vì chỉ boolean ---
+    // API kiểm tra user tồn tại & trả về ID (Dùng khi tìm kiếm để tạo chat mới)
     @GetMapping("/check/{username}")
     public ResponseEntity<?> checkUserExists(@PathVariable String username) {
         // Gọi hàm tìm user (trả về entity User đầy đủ)
@@ -59,6 +59,20 @@ public class AuthController {
         } else {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "User not found"));
+        }
+    }
+
+    // --- MỚI THÊM: API lấy thông tin user theo ID ---
+    // API này giúp Frontend đổi UUID (ví dụ: 56f9...) thành tên hiển thị (ví dụ: admin)
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<?> getUserById(@PathVariable String userId) {
+        // Lưu ý: Đảm bảo AuthService đã có hàm findUserById
+        User user = svc.findUserById(userId);
+
+        if (user != null) {
+            return ResponseEntity.ok(user);
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
         }
     }
 }
