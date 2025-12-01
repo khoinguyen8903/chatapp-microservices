@@ -62,15 +62,16 @@
           <div class="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 transform -translate-x-full transition-transform duration-200"
                [class.translate-x-0]="selectedUser()?.id === getRecipientId(room)"></div>
           
-          <!-- Avatar (Lấy chữ cái đầu) -->
+          <!-- Avatar: Lấy chữ cái đầu của TÊN HIỂN THỊ (getDisplayName) -->
           <div class="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md ring-2 ring-white">
-            {{ getRecipientId(room).charAt(0) | uppercase }}
+            {{ getDisplayName(room).charAt(0) | uppercase }}
           </div>
           
           <div class="ml-3 truncate flex-1">
             <div class="flex justify-between items-center">
+                <!-- Tên người dùng: Dùng getDisplayName -->
                 <p class="font-bold text-gray-800 text-sm truncate group-hover:text-blue-700 transition-colors">
-                    {{ getRecipientId(room) }}
+                    {{ getDisplayName(room) }}
                 </p>
             </div>
             <p class="text-xs text-gray-500 truncate mt-0.5 flex items-center gap-1">

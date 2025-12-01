@@ -3,11 +3,14 @@ package com.chatapp.auth_service.controller;
 import com.chatapp.auth_service.dto.LoginRequest;
 import com.chatapp.auth_service.dto.LoginResponse;
 import com.chatapp.auth_service.dto.RegisterRequest;
+import com.chatapp.auth_service.entity.User;
 import com.chatapp.auth_service.service.AuthService;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus; // Import thêm
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -40,17 +43,22 @@ public class AuthController {
         return ResponseEntity.ok().body("{\"userId\":\"" + userId + "\"}");
     }
 
-    // --- MỚI THÊM: API kiểm tra user tồn tại ---
+    // --- ĐÃ CẬP NHẬT: Trả về userId thay vì chỉ boolean ---
     @GetMapping("/check/{username}")
     public ResponseEntity<?> checkUserExists(@PathVariable String username) {
-        // Gọi service để kiểm tra (bạn cần đảm bảo AuthService đã có hàm existsByUsername)
-        boolean exists = svc.existsByUsername(username);
+        // Gọi hàm tìm user (trả về entity User đầy đủ)
+        User user = svc.findUserByUsername(username);
 
-        if (exists) {
-            return ResponseEntity.ok().body("{\"exists\": true}");
+        if (user != null) {
+            // Trả về JSON: { "exists": true, "userId": "...", "username": "..." }
+            return ResponseEntity.ok(Map.of(
+                    "exists", true,
+                    "userId", user.getId(),       // ID thật (UUID) để dùng cho Topic chat
+                    "username", user.getUsername() // Tên chuẩn trong DB
+            ));
         } else {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("{\"error\": \"User not found\"}");
+                    .body(Map.of("error", "User not found"));
         }
     }
 }

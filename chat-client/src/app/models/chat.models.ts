@@ -12,4 +12,8 @@ export interface ChatRoom {
   chatId: string;
   senderId: string;
   recipientId: string;
+  
+ 
+  chatName?: string; // Tên hiển thị (Username) thay vì UUID
+  // -----------------------
 }

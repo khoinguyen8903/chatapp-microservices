@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
-import { AuthService } from '../../services/auth.service'; // 1. Đã Import
+import { AuthService } from '../../services/auth.service';
 import { ChatMessage, ChatRoom } from '../../models/chat.models';
 
 @Component({
@@ -26,9 +26,10 @@ export class Chat implements OnInit, OnDestroy {
 
   constructor(
     private chatService: ChatService, 
-    private authService: AuthService, // 2. ĐÃ SỬA: Inject AuthService vào đây
+    private authService: AuthService,
     private router: Router
   ) {
+    // Tự động cuộn xuống khi có tin nhắn mới
     effect(() => {
       if (this.messages().length > 0) {
         this.scrollToBottom();
@@ -42,9 +43,13 @@ export class Chat implements OnInit, OnDestroy {
       const user = JSON.parse(userStr);
       this.currentUser.set(user);
       
+      // 1. Kết nối Socket
       this.chatService.connect(this.currentUser());
+      
+      // 2. Tải danh sách phòng
       this.loadRooms();
 
+      // 3. Lắng nghe tin nhắn
       this.chatService.onMessage().subscribe((msg) => {
         if (msg) {
           const currentSelected = this.selectedUser();
@@ -73,9 +78,13 @@ export class Chat implements OnInit, OnDestroy {
     });
   }
 
+  // Chọn phòng chat
   onSelectUser(room: ChatRoom) {
     const recipientId = this.getRecipientId(room);
-    this.selectedUser.set({ id: recipientId, name: recipientId });
+    // Sử dụng helper để lấy tên hiển thị đẹp
+    const displayName = this.getDisplayName(room);
+    
+    this.selectedUser.set({ id: recipientId, name: displayName });
     
     this.chatService.getChatMessages(this.currentUser().id, recipientId).subscribe(msgs => {
       this.messages.set(msgs); 
@@ -83,37 +92,42 @@ export class Chat implements OnInit, OnDestroy {
     });
   }
 
-  // --- 3. ĐÃ SỬA: LOGIC KIỂM TRA USER TRƯỚC KHI TẠO ---
+  // --- LOGIC TẠO CHAT MỚI (Lấy tên đẹp) ---
   startNewChat() {
     if (!this.userToChat.trim()) return;
-    const recipientId = this.userToChat.trim();
+    const usernameInput = this.userToChat.trim();
     
-    if (recipientId === this.currentUser().id) {
-        alert('Bạn không thể chat với chính mình!');
-        return;
-    }
+    this.authService.checkUserExists(usernameInput).subscribe({
+      next: (res: any) => {
+        const realRecipientId = res.userId; 
+        const realUsername = res.username; // Tên thật từ DB
 
-    // Kiểm tra xem đã có trong danh sách chưa
-    const existingRoom = this.chatRooms().find(r => 
-        r.senderId === recipientId || r.recipientId === recipientId
-    );
+        if (realRecipientId === this.currentUser().id) {
+            alert('Bạn không thể chat với chính mình!');
+            return;
+        }
 
-    if (existingRoom) {
-        this.onSelectUser(existingRoom);
-        this.userToChat = '';
-        return; // Đã có phòng thì mở luôn, không cần check API
-    }
+        const existingRoom = this.chatRooms().find(r => 
+            r.senderId === realRecipientId || r.recipientId === realRecipientId
+        );
 
-    // GỌI API KIỂM TRA USER TỒN TẠI KHÔNG
-    this.authService.checkUserExists(recipientId).subscribe({
-      next: () => {
-        // --- NẾU USER TỒN TẠI (API trả về 200 OK) ---
-        // Tạo phòng "giả" tạm thời ở Client
+        if (existingRoom) {
+            // Cập nhật tên hiển thị nếu chưa có
+            if (!existingRoom.chatName) {
+                existingRoom.chatName = realUsername;
+            }
+            this.onSelectUser(existingRoom);
+            this.userToChat = '';
+            return;
+        }
+
+        // Tạo phòng mới với tên hiển thị
         const newRoom: ChatRoom = {
             id: 'temp_' + Date.now(),
-            chatId: `${this.currentUser().id}_${recipientId}`,
+            chatId: `${this.currentUser().id}_${realRecipientId}`,
             senderId: this.currentUser().id,
-            recipientId: recipientId
+            recipientId: realRecipientId,
+            chatName: realUsername // Lưu tên vào đây
         };
         
         this.chatRooms.update(rooms => [newRoom, ...rooms]);
@@ -121,12 +135,17 @@ export class Chat implements OnInit, OnDestroy {
         this.userToChat = '';
       },
       error: (err) => {
-        // --- NẾU USER KHÔNG TỒN TẠI (API trả về 404) ---
-        alert(`Người dùng "${recipientId}" không tồn tại trong hệ thống!`);
+        if (err.status === 404) {
+             alert(`Người dùng "${usernameInput}" không tồn tại!`);
+        } else {
+             console.error(err);
+             alert('Lỗi hệ thống hoặc mất kết nối!');
+        }
       }
     });
   }
 
+  // --- GỬI TIN NHẮN ---
   sendMessage() {
     if (!this.newMessage.trim() || !this.selectedUser()) return;
 
@@ -137,9 +156,24 @@ export class Chat implements OnInit, OnDestroy {
       timestamp: new Date()
     };
 
-    this.chatService.sendMessage(msg);
-    this.messages.update(old => [...old, msg]);
-    this.newMessage = '';
+    // Kiểm tra kết quả gửi
+    const isSent = this.chatService.sendMessage(msg);
+    
+    if (isSent) {
+        this.messages.update(old => [...old, msg]);
+        this.newMessage = '';
+    } else {
+        alert('Không thể gửi tin nhắn. Vui lòng kiểm tra kết nối mạng!');
+    }
+  }
+
+  // --- HELPER: Lấy tên hiển thị ---
+  getDisplayName(room: ChatRoom): string {
+    // 1. Ưu tiên tên đã lưu
+    if (room.chatName) return room.chatName;
+    
+    // 2. Fallback: Dùng UUID (tránh lỗi trắng màn hình)
+    return room.senderId === this.currentUser().id ? room.recipientId : room.senderId;
   }
 
   getRecipientId(room: ChatRoom): string {

@@ -27,8 +27,7 @@ public class AuthService {
 
     @Transactional
     public String register(RegisterRequest req) {
-        // Quay lại dùng logic kiểm tra cơ bản để tránh lỗi 500
-        // Nếu cần IgnoreCase, ta sẽ xử lý sau khi hệ thống ổn định
+        // Kiểm tra tồn tại trước khi đăng ký
         if (userRepository.existsByUsername(req.getUsername())) {
             throw new IllegalArgumentException("Username already exists");
         }
@@ -53,10 +52,14 @@ public class AuthService {
         return new LoginResponse(token, user.getId(), user.getDisplayName());
     }
 
-    // --- SỬA CHỖ NÀY: Dùng findByUsername cho an toàn ---
+    // Hàm kiểm tra tồn tại (Trả về true/false)
     public boolean existsByUsername(String username) {
-        // Login dùng hàm này được -> thì Check User cũng phải dùng được!
-        // .isPresent() trả về true nếu tìm thấy user, false nếu không.
         return userRepository.findByUsername(username).isPresent();
+    }
+
+    // --- MỚI THÊM: Hàm tìm user và trả về đối tượng User đầy đủ ---
+    // Hàm này được AuthController gọi để lấy userId
+    public User findUserByUsername(String username) {
+        return userRepository.findByUsername(username).orElse(null);
     }
 }
