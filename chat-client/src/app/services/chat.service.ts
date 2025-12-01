@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { ChatMessage, ChatRoom } from '../models/chat.models';
+import { ChatMessage, ChatRoom, TypingMessage } from '../models/chat.models'; 
 import { Observable, Subject } from 'rxjs';
 
 import SockJS from 'sockjs-client';
@@ -12,62 +12,81 @@ import { Stomp } from '@stomp/stompjs';
 export class ChatService {
   private apiUrl = 'http://localhost:8080'; 
   private stompClient: any;
+  
   private messageSubject = new Subject<ChatMessage>();
+  private typingSubject = new Subject<TypingMessage>(); 
 
   constructor(private http: HttpClient) { }
 
   connect(currentUser: any): void {
-    // Nếu đã kết nối rồi thì không kết nối lại
     if (this.stompClient && this.stompClient.connected) {
       return;
     }
     
-    // Sử dụng Factory function cho SockJS để hỗ trợ reconnect khi mất mạng
+    // Sử dụng Factory function cho SockJS để hỗ trợ reconnect
     this.stompClient = Stomp.over(() => new SockJS(`${this.apiUrl}/ws`));
-    
-    // Tắt debug log nếu muốn console gọn gàng
     // this.stompClient.debug = () => {}; 
 
     const _this = this;
     this.stompClient.connect({}, function (frame: any) {
       console.log('Connected to STOMP: ' + frame);
 
-      // --- CẬP NHẬT QUAN TRỌNG: Subscribe vào Topic riêng của User ---
-      // Lắng nghe: /topic/{ID_CỦA_TÔI}
       _this.stompClient.subscribe(`/topic/${currentUser.id}`, function (msg: any) {
         if (msg.body) {
-          const notification = JSON.parse(msg.body);
-          const chatMessage: ChatMessage = {
-             senderId: notification.senderId,
-             recipientId: notification.recipientId,
-             content: notification.content,
-             timestamp: new Date()
-          };
-          _this.messageSubject.next(chatMessage);
+          const payload = JSON.parse(msg.body);
+          
+          // --- SỬA LOGIC KIỂM TRA CHO CHẮC CHẮN ---
+          // Kiểm tra xem có trường 'isTyping' HOẶC 'typing' không
+          // (Phòng trường hợp Backend Java tự động bỏ chữ "is" khi serialize)
+          if (payload.hasOwnProperty('isTyping') || payload.hasOwnProperty('typing')) {
+             
+             // Lấy giá trị đúng
+             const isTypingValue = payload.hasOwnProperty('isTyping') ? payload.isTyping : payload.typing;
+             
+             const typingMsg: TypingMessage = {
+                 senderId: payload.senderId,
+                 recipientId: payload.recipientId,
+                 isTyping: isTypingValue
+             };
+             _this.typingSubject.next(typingMsg);
+
+          } else {
+             // Đây là tin nhắn Chat bình thường
+             const chatMessage: ChatMessage = {
+                 senderId: payload.senderId,
+                 recipientId: payload.recipientId,
+                 content: payload.content,
+                 timestamp: new Date()
+             };
+             _this.messageSubject.next(chatMessage);
+          }
         }
       });
-      // ---------------------------------------------------------
       
     }, function(error: any) {
        console.error('STOMP Connection Error:', error);
-       // Thử kết nối lại sau 5 giây nếu bị ngắt kết nối
        setTimeout(() => _this.connect(currentUser), 5000); 
     });
   }
 
-  // --- CẬP NHẬT: Trả về boolean để Component biết kết quả gửi ---
   sendMessage(msg: ChatMessage): boolean {
     if (this.stompClient && this.stompClient.connected) {
         try {
             this.stompClient.send("/app/chat", {}, JSON.stringify(msg));
-            return true; // Gửi thành công
+            return true;
         } catch (e) {
             console.error("Error sending message:", e);
-            return false; // Lỗi khi gửi
+            return false;
         }
     } else {
         console.error("STOMP client not connected.");
-        return false; // Mất kết nối
+        return false;
+    }
+  }
+
+  sendTyping(typingMsg: TypingMessage) {
+    if (this.stompClient && this.stompClient.connected) {
+        this.stompClient.send("/app/typing", {}, JSON.stringify(typingMsg));
     }
   }
 
@@ -81,5 +100,9 @@ export class ChatService {
 
   onMessage(): Observable<ChatMessage> {
     return this.messageSubject.asObservable();
+  }
+
+  onTyping(): Observable<TypingMessage> {
+    return this.typingSubject.asObservable();
   }
 }

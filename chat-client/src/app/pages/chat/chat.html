@@ -143,6 +143,19 @@
           </div>
         </div>
       }
+
+      <!-- --- MỚI THÊM: Animation Đang nhập... --- -->
+      @if (isRecipientTyping()) {
+        <div class="flex w-full animate-slide-up">
+          <div class="bg-white border border-gray-100 px-4 py-3 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-1 w-fit">
+             <!-- Animation 3 dấu chấm nhảy múa -->
+             <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+             <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-75"></div>
+             <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-150"></div>
+          </div>
+        </div>
+      }
+      <!-- ---------------------------------------- -->
     </div>
 
     <!-- 3. Input Area -->
@@ -153,6 +166,7 @@
               type="text" 
               [(ngModel)]="newMessage" 
               (keyup.enter)="sendMessage()"
+              (input)="onInputTyping()" 
               placeholder="Nhập tin nhắn..." 
               class="w-full bg-gray-100 border border-transparent rounded-full px-5 py-3 focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent transition-all outline-none text-gray-700 placeholder-gray-500"
               [disabled]="!selectedUser()"

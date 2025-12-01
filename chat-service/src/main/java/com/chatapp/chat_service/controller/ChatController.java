@@ -3,6 +3,7 @@ package com.chatapp.chat_service.controller;
 import com.chatapp.chat_service.model.ChatMessage;
 import com.chatapp.chat_service.model.ChatNotification;
 import com.chatapp.chat_service.model.ChatRoom;
+import com.chatapp.chat_service.model.TypingMessage; // Đừng quên import Model này
 import com.chatapp.chat_service.service.ChatMessageService;
 import com.chatapp.chat_service.service.ChatRoomService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,15 +25,14 @@ public class ChatController {
     @Autowired private ChatMessageService chatMessageService;
     @Autowired private ChatRoomService chatRoomService;
 
+    // 1. Xử lý tin nhắn Chat
     @MessageMapping("/chat")
     public void processMessage(@Payload ChatMessage chatMessage) {
-        // --- LOG DEBUG 1: Kiểm tra xem tin nhắn có tới được Controller không ---
+        // --- LOG DEBUG (Có thể giữ lại hoặc xóa đi nếu đã chạy ngon) ---
         System.out.println("DEBUG: Nhận tin nhắn từ: " + chatMessage.getSenderId());
-        System.out.println("DEBUG: Gửi tới: " + chatMessage.getRecipientId());
-        System.out.println("DEBUG: Nội dung: " + chatMessage.getContent());
 
         try {
-            // 1. Logic phòng chat
+            // Kiểm tra và tạo phòng chat
             Optional<String> chatIdSender = chatRoomService.getChatRoomId(
                     chatMessage.getSenderId(), chatMessage.getRecipientId(), true);
 
@@ -43,16 +43,12 @@ public class ChatController {
                 chatMessage.setChatId(chatIdSender.get());
             }
 
-            // 2. Lưu tin nhắn
+            // Lưu tin nhắn
             ChatMessage savedMsg = chatMessageService.save(chatMessage);
-            System.out.println("DEBUG: Đã lưu tin nhắn vào DB với ID: " + savedMsg.getId());
 
-            // 3. Gửi thông báo
-            String destination = "/topic/" + chatMessage.getRecipientId();
-            System.out.println("DEBUG: Đang gửi tới kênh: " + destination);
-
+            // Gửi thông báo tới Topic của người nhận
             messagingTemplate.convertAndSend(
-                    destination,
+                    "/topic/" + chatMessage.getRecipientId(),
                     ChatNotification.builder()
                             .id(savedMsg.getId())
                             .senderId(savedMsg.getSenderId())
@@ -60,13 +56,23 @@ public class ChatController {
                             .content(savedMsg.getContent())
                             .build()
             );
-            System.out.println("DEBUG: Đã gửi thông báo thành công!");
+            System.out.println("DEBUG: Đã gửi tới /topic/" + chatMessage.getRecipientId());
 
         } catch (Exception e) {
-            // --- LOG DEBUG 2: Bắt lỗi nếu có ---
             System.err.println("DEBUG ERROR: Lỗi khi xử lý tin nhắn!");
             e.printStackTrace();
         }
+    }
+
+    // 2. MỚI THÊM: Xử lý sự kiện Typing (Đang nhập...)
+    @MessageMapping("/typing")
+    public void processTyping(@Payload TypingMessage typingMessage) {
+        // Không lưu vào Database, chỉ chuyển tiếp (forward) ngay lập tức
+        // Gửi đến kênh topic của người nhận
+        messagingTemplate.convertAndSend(
+                "/topic/" + typingMessage.getRecipientId(),
+                typingMessage
+        );
     }
 
     @GetMapping("/messages/{senderId}/{recipientId}")
