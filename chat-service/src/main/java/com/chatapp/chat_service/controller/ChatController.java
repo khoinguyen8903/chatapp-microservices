@@ -3,19 +3,25 @@ package com.chatapp.chat_service.controller;
 import com.chatapp.chat_service.model.ChatMessage;
 import com.chatapp.chat_service.model.ChatNotification;
 import com.chatapp.chat_service.model.ChatRoom;
-import com.chatapp.chat_service.model.TypingMessage; // Đừng quên import Model này
+import com.chatapp.chat_service.model.TypingMessage;
+import com.chatapp.chat_service.model.UserStatus;
 import com.chatapp.chat_service.service.ChatMessageService;
 import com.chatapp.chat_service.service.ChatRoomService;
+import com.chatapp.chat_service.service.UserStatusService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Controller
@@ -24,18 +30,14 @@ public class ChatController {
     @Autowired private SimpMessagingTemplate messagingTemplate;
     @Autowired private ChatMessageService chatMessageService;
     @Autowired private ChatRoomService chatRoomService;
+    @Autowired private UserStatusService userStatusService;
 
     // 1. Xử lý tin nhắn Chat
     @MessageMapping("/chat")
     public void processMessage(@Payload ChatMessage chatMessage) {
-        // --- LOG DEBUG (Có thể giữ lại hoặc xóa đi nếu đã chạy ngon) ---
-        System.out.println("DEBUG: Nhận tin nhắn từ: " + chatMessage.getSenderId());
-
         try {
-            // Kiểm tra và tạo phòng chat
             Optional<String> chatIdSender = chatRoomService.getChatRoomId(
                     chatMessage.getSenderId(), chatMessage.getRecipientId(), true);
-
             chatRoomService.getChatRoomId(
                     chatMessage.getRecipientId(), chatMessage.getSenderId(), true);
 
@@ -43,10 +45,8 @@ public class ChatController {
                 chatMessage.setChatId(chatIdSender.get());
             }
 
-            // Lưu tin nhắn
             ChatMessage savedMsg = chatMessageService.save(chatMessage);
 
-            // Gửi thông báo tới Topic của người nhận
             messagingTemplate.convertAndSend(
                     "/topic/" + chatMessage.getRecipientId(),
                     ChatNotification.builder()
@@ -56,23 +56,65 @@ public class ChatController {
                             .content(savedMsg.getContent())
                             .build()
             );
-            System.out.println("DEBUG: Đã gửi tới /topic/" + chatMessage.getRecipientId());
-
         } catch (Exception e) {
-            System.err.println("DEBUG ERROR: Lỗi khi xử lý tin nhắn!");
             e.printStackTrace();
         }
     }
 
-    // 2. MỚI THÊM: Xử lý sự kiện Typing (Đang nhập...)
+    // 2. Xử lý sự kiện Typing
     @MessageMapping("/typing")
     public void processTyping(@Payload TypingMessage typingMessage) {
-        // Không lưu vào Database, chỉ chuyển tiếp (forward) ngay lập tức
-        // Gửi đến kênh topic của người nhận
         messagingTemplate.convertAndSend(
                 "/topic/" + typingMessage.getRecipientId(),
                 typingMessage
         );
+    }
+
+    // 3. Xử lý khi User Online (Báo danh)
+    @MessageMapping("/user.addUser")
+    public void addUser(@Payload String userId, SimpMessageHeaderAccessor headerAccessor) {
+        if (headerAccessor.getSessionAttributes() != null) {
+            headerAccessor.getSessionAttributes().put("userId", userId);
+        }
+
+        userStatusService.saveUserOnline(userId);
+
+        messagingTemplate.convertAndSend("/topic/status/" + userId,
+                Map.of("status", "ONLINE", "userId", userId));
+
+        System.out.println("User Online: " + userId);
+    }
+
+    // 4. Xử lý khi User Offline (Ngắt kết nối)
+    @EventListener
+    public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
+        SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.wrap(event.getMessage());
+        String userId = (String) headers.getSessionAttributes().get("userId");
+
+        if (userId != null) {
+            System.out.println("User Disconnected: " + userId);
+
+            userStatusService.saveUserOffline(userId);
+
+            // Gửi thông báo Offline kèm thời gian LastSeen
+            messagingTemplate.convertAndSend("/topic/status/" + userId,
+                    Map.of(
+                            "status", "OFFLINE",
+                            "userId", userId,
+                            "lastSeen", new java.util.Date()
+                    )
+            );
+        }
+    }
+
+    // --- 5. SỬA ĐỔI: API lấy trạng thái hiện tại ---
+    // Đổi đường dẫn thành /rooms/status/{userId} để đi qua Gateway dễ dàng hơn
+    @GetMapping("/rooms/status/{userId}")
+    public ResponseEntity<UserStatus> getUserStatus(@PathVariable String userId) {
+        System.out.println("DEBUG: API lấy status cho user: " + userId);
+        UserStatus status = userStatusService.getUserStatus(userId);
+        System.out.println("DEBUG: Kết quả: " + status);
+        return ResponseEntity.ok(status);
     }
 
     @GetMapping("/messages/{senderId}/{recipientId}")

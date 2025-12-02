@@ -1,17 +1,19 @@
+// ... imports giữ nguyên
 import { Component, OnInit, OnDestroy, signal, effect } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common'; 
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
-import { ChatMessage, ChatRoom, TypingMessage } from '../../models/chat.models';
+import { ChatMessage, ChatRoom, TypingMessage, UserStatus } from '../../models/chat.models';
 
 @Component({
   selector: 'app-chat',
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './chat.html',
-  styleUrls: ['./chat.scss']
+  styleUrls: ['./chat.scss'],
+  providers: [DatePipe] 
 })
 export class Chat implements OnInit, OnDestroy {
   
@@ -24,18 +26,23 @@ export class Chat implements OnInit, OnDestroy {
   newMessage = '';
   userToChat = ''; 
 
-  // --- STATE CHO TÍNH NĂNG TYPING ---
+  // --- STATE CHO TYPING ---
   isRecipientTyping = signal(false); 
   private typingTimeout: any;
-  // ---------------------------------
 
-  // --- CACHE ĐỂ LƯU TÊN USER (Tránh gọi API nhiều lần) ---
+  // --- STATE CHO ONLINE/OFFLINE ---
+  partnerStatus = signal<string>('OFFLINE');
+  lastSeen = signal<Date | null>(null);
+  private statusSubscription: any; 
+
+  // --- CACHE TÊN USER ---
   private userCache = new Map<string, string>(); 
 
   constructor(
     private chatService: ChatService, 
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private datePipe: DatePipe 
   ) {
     effect(() => {
       if (this.messages().length > 0 || this.isRecipientTyping()) {
@@ -53,7 +60,6 @@ export class Chat implements OnInit, OnDestroy {
       this.chatService.connect(this.currentUser());
       this.loadRooms();
 
-      // 1. Lắng nghe tin nhắn
       this.chatService.onMessage().subscribe((msg) => {
         if (msg) {
           const currentSelected = this.selectedUser();
@@ -65,14 +71,10 @@ export class Chat implements OnInit, OnDestroy {
           const isNewContact = !this.chatRooms().some(r => 
              r.senderId === msg.senderId || r.recipientId === msg.senderId
           );
-          
-          if (isNewContact) {
-             this.loadRooms();
-          }
+          if (isNewContact) this.loadRooms();
         }
       });
 
-      // 2. Lắng nghe Typing
       this.chatService.onTyping().subscribe((typingMsg) => {
         const currentSelected = this.selectedUser();
         if (currentSelected && typingMsg.senderId === currentSelected.id) {
@@ -80,39 +82,39 @@ export class Chat implements OnInit, OnDestroy {
         }
       });
 
+      this.chatService.onStatusUpdate().subscribe((update: any) => {
+          if (this.selectedUser() && update.userId === this.selectedUser().id) {
+              this.partnerStatus.set(update.status);
+              
+              if (update.status === 'OFFLINE') {
+                  const time = update.lastSeen ? new Date(update.lastSeen) : new Date();
+                  this.lastSeen.set(time);
+              }
+          }
+      });
+
     } else {
         this.router.navigate(['/login']);
     }
   }
 
-  // --- SỬA HÀM NÀY: Tải phòng và tự động lấy tên thật (Fix lỗi hiện UUID) ---
   loadRooms() {
     this.chatService.getChatRooms(this.currentUser().id).subscribe({
       next: (rooms) => {
         this.chatRooms.set(rooms);
-        
-        // Duyệt qua từng phòng để lấy tên Username
         rooms.forEach(room => {
             const partnerId = this.getRecipientId(room);
-            
-            // Nếu chưa có tên hiển thị
             if (!room.chatName) {
-                // Kiểm tra cache xem đã lấy chưa
                 if (this.userCache.has(partnerId)) {
                     room.chatName = this.userCache.get(partnerId);
                 } else {
-                    // Gọi API lấy tên từ Auth Service
                     this.authService.getUserById(partnerId).subscribe({
                         next: (user: any) => {
                             room.chatName = user.username; 
                             this.userCache.set(partnerId, user.username);
-                            
-                            // Cập nhật lại danh sách để giao diện hiển thị tên mới
                             this.chatRooms.update(current => [...current]);
                         },
-                        error: () => {
-                            room.chatName = 'Unknown User';
-                        }
+                        error: () => { room.chatName = 'Unknown User'; }
                     });
                 }
             }
@@ -128,6 +130,20 @@ export class Chat implements OnInit, OnDestroy {
     
     this.selectedUser.set({ id: recipientId, name: displayName });
     this.isRecipientTyping.set(false);
+
+    this.chatService.getUserStatus(recipientId).subscribe({
+        next: (statusData: any) => {
+            this.partnerStatus.set(statusData.status);
+            this.lastSeen.set(statusData.lastSeen ? new Date(statusData.lastSeen) : null);
+        },
+        error: () => {
+            this.partnerStatus.set('OFFLINE');
+            this.lastSeen.set(null);
+        }
+    });
+
+    if (this.statusSubscription) this.statusSubscription.unsubscribe();
+    this.statusSubscription = this.chatService.subscribeToStatus(recipientId);
     
     this.chatService.getChatMessages(this.currentUser().id, recipientId).subscribe(msgs => {
       this.messages.set(msgs); 
@@ -135,116 +151,74 @@ export class Chat implements OnInit, OnDestroy {
     });
   }
 
-  // Gửi sự kiện Typing
+  // --- HÀM ĐÃ SỬA: Luôn hiển thị text "Hoạt động..." ---
+  getLastSeenText(): string {
+      // 1. Nếu đang Online
+      if (this.partnerStatus() === 'ONLINE') return 'Đang hoạt động';
+      
+      // 2. Nếu không có dữ liệu (null) -> Coi như đã off rất lâu -> "3 tháng trước"
+      if (!this.lastSeen()) return 'Hoạt động 3 tháng trước';
+
+      const now = new Date();
+      const diff = Math.floor((now.getTime() - this.lastSeen()!.getTime()) / 1000); // Giây
+
+      // 3. Logic hiển thị thời gian tương đối
+      if (diff < 60) return 'Vừa mới truy cập';
+      if (diff < 3600) return `Hoạt động ${Math.floor(diff / 60)} phút trước`;
+      if (diff < 86400) return `Hoạt động ${Math.floor(diff / 3600)} giờ trước`;
+      if (diff < 2592000) return `Hoạt động ${Math.floor(diff / 86400)} ngày trước`; // Dưới 30 ngày
+      if (diff < 7776000) return `Hoạt động ${Math.floor(diff / 2592000)} tháng trước`; // Dưới 3 tháng (90 ngày)
+
+      // 4. Nếu quá 3 tháng -> "3 tháng trước"
+      return 'Hoạt động 3 tháng trước';
+  }
+
+  // ... (Các hàm khác giữ nguyên) ...
+  
   onInputTyping() {
     if (!this.selectedUser()) return;
-
     const typingMsg: TypingMessage = {
-        senderId: this.currentUser().id,
-        recipientId: this.selectedUser().id,
-        isTyping: true
+        senderId: this.currentUser().id, recipientId: this.selectedUser().id, isTyping: true
     };
     this.chatService.sendTyping(typingMsg);
-
     if (this.typingTimeout) clearTimeout(this.typingTimeout);
-
     this.typingTimeout = setTimeout(() => {
         const stopTypingMsg: TypingMessage = {
-            senderId: this.currentUser().id,
-            recipientId: this.selectedUser().id,
-            isTyping: false
+            senderId: this.currentUser().id, recipientId: this.selectedUser().id, isTyping: false
         };
         this.chatService.sendTyping(stopTypingMsg);
     }, 1500);
   }
 
-  // Tạo phòng mới
   startNewChat() {
     if (!this.userToChat.trim()) return;
     const usernameInput = this.userToChat.trim();
-    
     this.authService.checkUserExists(usernameInput).subscribe({
       next: (res: any) => {
-        const realRecipientId = res.userId; 
-        const realUsername = res.username;
-
-        if (realRecipientId === this.currentUser().id) {
-            alert('Bạn không thể chat với chính mình!');
-            return;
-        }
-
-        const existingRoom = this.chatRooms().find(r => 
-            r.senderId === realRecipientId || r.recipientId === realRecipientId
-        );
-
-        if (existingRoom) {
-            if (!existingRoom.chatName) {
-                existingRoom.chatName = realUsername;
-            }
-            this.onSelectUser(existingRoom);
-            this.userToChat = '';
-            return;
-        }
-
-        const newRoom: ChatRoom = {
-            id: 'temp_' + Date.now(),
-            chatId: `${this.currentUser().id}_${realRecipientId}`,
-            senderId: this.currentUser().id,
-            recipientId: realRecipientId,
-            chatName: realUsername
-        };
-        
-        this.chatRooms.update(rooms => [newRoom, ...rooms]);
-        this.onSelectUser(newRoom);
-        this.userToChat = '';
+        const realRecipientId = res.userId; const realUsername = res.username;
+        if (realRecipientId === this.currentUser().id) { alert('Bạn không thể chat với chính mình!'); return; }
+        const existingRoom = this.chatRooms().find(r => r.senderId === realRecipientId || r.recipientId === realRecipientId);
+        if (existingRoom) { if (!existingRoom.chatName) existingRoom.chatName = realUsername; this.onSelectUser(existingRoom); this.userToChat = ''; return; }
+        const newRoom: ChatRoom = { id: 'temp_' + Date.now(), chatId: `${this.currentUser().id}_${realRecipientId}`, senderId: this.currentUser().id, recipientId: realRecipientId, chatName: realUsername };
+        this.chatRooms.update(rooms => [newRoom, ...rooms]); this.onSelectUser(newRoom); this.userToChat = '';
       },
-      error: (err) => {
-        if (err.status === 404) {
-             alert(`Người dùng "${usernameInput}" không tồn tại!`);
-        } else {
-             console.error(err);
-             alert('Lỗi hệ thống hoặc mất kết nối!');
-        }
-      }
+      error: (err) => { if (err.status === 404) alert(`Người dùng "${usernameInput}" không tồn tại!`); else console.error(err); }
     });
   }
 
   sendMessage() {
     if (!this.newMessage.trim() || !this.selectedUser()) return;
-
-    const msg: ChatMessage = {
-      senderId: this.currentUser().id,
-      recipientId: this.selectedUser().id,
-      content: this.newMessage,
-      timestamp: new Date()
-    };
-
+    const msg: ChatMessage = { senderId: this.currentUser().id, recipientId: this.selectedUser().id, content: this.newMessage, timestamp: new Date() };
     const isSent = this.chatService.sendMessage(msg);
-    
-    if (isSent) {
-        this.messages.update(old => [...old, msg]);
-        this.newMessage = '';
-        if (this.typingTimeout) clearTimeout(this.typingTimeout);
-    } else {
-        alert('Không thể gửi tin nhắn. Vui lòng kiểm tra kết nối mạng!');
-    }
+    if (isSent) { 
+        this.messages.update(old => [...old, msg]); this.newMessage = ''; 
+        if (this.typingTimeout) clearTimeout(this.typingTimeout); 
+    } 
+    else { alert('Không thể gửi tin nhắn. Vui lòng kiểm tra kết nối mạng!'); }
   }
 
-  getDisplayName(room: ChatRoom): string {
-    if (room.chatName) return room.chatName;
-    return room.senderId === this.currentUser().id ? room.recipientId : room.senderId;
-  }
-
-  getRecipientId(room: ChatRoom): string {
-    return room.senderId === this.currentUser().id ? room.recipientId : room.senderId;
-  }
-
-  scrollToBottom() {
-    setTimeout(() => {
-        const element = document.getElementById('chat-container');
-        if (element) element.scrollTop = element.scrollHeight;
-    }, 50);
-  }
-
-  ngOnDestroy() {}
+  getDisplayName(room: ChatRoom): string { if (room.chatName) return room.chatName; return room.senderId === this.currentUser().id ? room.recipientId : room.senderId; }
+  getRecipientId(room: ChatRoom): string { return room.senderId === this.currentUser().id ? room.recipientId : room.senderId; }
+  scrollToBottom() { setTimeout(() => { const el = document.getElementById('chat-container'); if (el) el.scrollTop = el.scrollHeight; }, 50); }
+  ngOnDestroy() { if (this.statusSubscription) this.statusSubscription.unsubscribe(); }
 }

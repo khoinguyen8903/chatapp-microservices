@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { ChatMessage, ChatRoom, TypingMessage } from '../models/chat.models'; 
+import { ChatMessage, ChatRoom, TypingMessage, UserStatus } from '../models/chat.models'; 
 import { Observable, Subject } from 'rxjs';
 
 import SockJS from 'sockjs-client';
@@ -10,11 +10,13 @@ import { Stomp } from '@stomp/stompjs';
   providedIn: 'root'
 })
 export class ChatService {
+  // Đảm bảo URL này trỏ đúng vào API Gateway (vd: http://localhost:8080)
   private apiUrl = 'http://localhost:8080'; 
   private stompClient: any;
   
   private messageSubject = new Subject<ChatMessage>();
   private typingSubject = new Subject<TypingMessage>(); 
+  private statusSubject = new Subject<UserStatus>();
 
   constructor(private http: HttpClient) { }
 
@@ -23,7 +25,7 @@ export class ChatService {
       return;
     }
     
-    // Sử dụng Factory function cho SockJS để hỗ trợ reconnect
+    // Sử dụng Factory function để hỗ trợ reconnect
     this.stompClient = Stomp.over(() => new SockJS(`${this.apiUrl}/ws`));
     // this.stompClient.debug = () => {}; 
 
@@ -31,27 +33,20 @@ export class ChatService {
     this.stompClient.connect({}, function (frame: any) {
       console.log('Connected to STOMP: ' + frame);
 
+      // 1. Subscribe nhận tin nhắn
       _this.stompClient.subscribe(`/topic/${currentUser.id}`, function (msg: any) {
         if (msg.body) {
           const payload = JSON.parse(msg.body);
           
-          // --- SỬA LOGIC KIỂM TRA CHO CHẮC CHẮN ---
-          // Kiểm tra xem có trường 'isTyping' HOẶC 'typing' không
-          // (Phòng trường hợp Backend Java tự động bỏ chữ "is" khi serialize)
           if (payload.hasOwnProperty('isTyping') || payload.hasOwnProperty('typing')) {
-             
-             // Lấy giá trị đúng
              const isTypingValue = payload.hasOwnProperty('isTyping') ? payload.isTyping : payload.typing;
-             
              const typingMsg: TypingMessage = {
                  senderId: payload.senderId,
                  recipientId: payload.recipientId,
                  isTyping: isTypingValue
              };
              _this.typingSubject.next(typingMsg);
-
           } else {
-             // Đây là tin nhắn Chat bình thường
              const chatMessage: ChatMessage = {
                  senderId: payload.senderId,
                  recipientId: payload.recipientId,
@@ -62,11 +57,33 @@ export class ChatService {
           }
         }
       });
+
+      // 2. Báo danh Online ngay khi kết nối
+      _this.stompClient.send("/app/user.addUser", {}, currentUser.id);
       
     }, function(error: any) {
        console.error('STOMP Connection Error:', error);
        setTimeout(() => _this.connect(currentUser), 5000); 
     });
+  }
+
+  // Lắng nghe trạng thái Real-time
+  subscribeToStatus(partnerId: string) {
+    if (this.stompClient && this.stompClient.connected) {
+        return this.stompClient.subscribe(`/topic/status/${partnerId}`, (msg: any) => {
+            if (msg.body) {
+                const statusUpdate = JSON.parse(msg.body);
+                this.statusSubject.next(statusUpdate as UserStatus);
+            }
+        });
+    }
+    return null;
+  }
+
+  // --- SỬA ĐƯỜNG DẪN API TẠI ĐÂY ---
+  // Đổi thành /rooms/status/{userId} để khớp với ChatController
+  getUserStatus(userId: string): Observable<UserStatus> {
+      return this.http.get<UserStatus>(`${this.apiUrl}/rooms/status/${userId}`);
   }
 
   sendMessage(msg: ChatMessage): boolean {
@@ -79,7 +96,6 @@ export class ChatService {
             return false;
         }
     } else {
-        console.error("STOMP client not connected.");
         return false;
     }
   }
@@ -104,5 +120,9 @@ export class ChatService {
 
   onTyping(): Observable<TypingMessage> {
     return this.typingSubject.asObservable();
+  }
+
+  onStatusUpdate(): Observable<UserStatus> {
+      return this.statusSubject.asObservable();
   }
 }
