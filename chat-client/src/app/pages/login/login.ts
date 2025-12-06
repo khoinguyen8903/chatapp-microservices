@@ -16,10 +16,7 @@ export class Login {
   isLoading = signal(false);
   showPassword = signal(false);
   
-  // Form chính
   authForm: FormGroup;
-
-  // Global error message (lỗi chung không thuộc về field nào)
   globalError = signal<string>('');
 
   constructor(
@@ -27,36 +24,29 @@ export class Login {
     private authService: AuthService,
     private router: Router
   ) {
-    // Khởi tạo Form với các validate khớp với Backend Java
     this.authForm = this.fb.group({
       username: ['', [
         Validators.required, 
         Validators.minLength(3), 
         Validators.maxLength(20),
-        Validators.pattern('^[a-zA-Z0-9]*$') // Khớp với regex Backend
+        Validators.pattern('^[a-zA-Z0-9]*$')
       ]],
       password: ['', [
         Validators.required, 
         Validators.minLength(6)
       ]],
-      confirmPassword: [''], // Validate logic sau
+      confirmPassword: [''],
       displayName: ['', [Validators.maxLength(50)]],
       email: ['', [Validators.email]]
     });
   }
 
-  // Helper để lấy control ra check lỗi trong HTML cho ngắn gọn
   get f() { return this.authForm.controls; }
 
   toggleMode() {
     this.isLoginMode.update(prev => !prev);
     this.globalError.set('');
     this.authForm.reset();
-    
-    // Nếu chuyển sang Register, thêm validator required cho displayName/email nếu cần
-    if (!this.isLoginMode()) {
-       // Có thể thêm logic dynamic validation ở đây nếu muốn chặt chẽ hơn
-    }
   }
 
   togglePassword() {
@@ -66,33 +56,34 @@ export class Login {
   onSubmit() {
     this.globalError.set('');
 
-    // 1. Validate Form chung
     if (this.authForm.invalid) {
-      // Đánh dấu tất cả các trường là đã touch để hiển thị lỗi đỏ
       this.authForm.markAllAsTouched(); 
       return;
     }
 
     const val = this.authForm.value;
 
-    // 2. Xử lý Logic Login
+    // --- LOGIC LOGIN ---
     if (this.isLoginMode()) {
       this.isLoading.set(true);
       this.authService.login({ username: val.username, password: val.password }).subscribe({
         next: (res) => {
           this.isLoading.set(false);
-          // --- SỬA Ở ĐÂY: Chuyển hướng sang trang Chat ---
           this.router.navigate(['/chat']); 
         },
         error: (err) => {
           this.isLoading.set(false);
-          this.globalError.set('Sai tài khoản hoặc mật khẩu.');
+          // Dịch lỗi login sang tiếng Việt luôn nếu cần
+          if (err.status === 401 || err.status === 400) {
+             this.globalError.set('Sai tài khoản hoặc mật khẩu.');
+          } else {
+             this.globalError.set('Lỗi kết nối đến máy chủ.');
+          }
         }
       });
     } 
-    // 3. Xử lý Logic Register
+    // --- LOGIC REGISTER ---
     else {
-      // Validate khớp password thủ công
       if (val.password !== val.confirmPassword) {
         this.authForm.get('confirmPassword')?.setErrors({ mismatch: true });
         return;
@@ -102,28 +93,38 @@ export class Login {
       this.authService.register({
         username: val.username,
         password: val.password,
-        displayName: val.displayName || val.username, // Fallback nếu rỗng
+        displayName: val.displayName || val.username,
         email: val.email
       }).subscribe({
         next: () => {
           this.isLoading.set(false);
           alert('Đăng ký thành công! Vui lòng đăng nhập.');
-          this.toggleMode(); // Chuyển về tab đăng nhập để người dùng login
+          this.toggleMode();
         },
         error: (err) => {
           this.isLoading.set(false);
           
-          // XỬ LÝ LỖI TỪ BACKEND TRẢ VỀ (Map<String, String>)
           if (err.status === 400 && err.error) {
-            const serverErrors = err.error; // {username: "...", password: "..."}
+            const serverErrors = err.error;
             
-            // Map lỗi vào từng field cụ thể
-            Object.keys(serverErrors).forEach(key => {
-              const control = this.authForm.get(key);
-              if (control) {
-                control.setErrors({ serverError: serverErrors[key] });
-              }
-            });
+            // 1. Xử lý lỗi chung (như "Username already exists")
+            if (serverErrors.error) {
+                // --- SỬA Ở ĐÂY: Dịch thông báo lỗi sang Tiếng Việt ---
+                if (serverErrors.error === 'Username already exists') {
+                    this.globalError.set('Tài khoản đã tồn tại');
+                } else {
+                    this.globalError.set(serverErrors.error);
+                }
+            } 
+            // 2. Xử lý lỗi validation từng trường
+            else {
+                Object.keys(serverErrors).forEach(key => {
+                  const control = this.authForm.get(key);
+                  if (control) {
+                    control.setErrors({ serverError: serverErrors[key] });
+                  }
+                });
+            }
           } else {
             this.globalError.set('Có lỗi xảy ra, vui lòng thử lại.');
           }
