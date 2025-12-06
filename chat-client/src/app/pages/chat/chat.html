@@ -1,9 +1,6 @@
 <div class="flex h-screen bg-gray-100 antialiased text-gray-800">
   
-  <!-- SIDEBAR: DANH SÁCH USER -->
   <div class="flex flex-col w-80 bg-white border-r border-gray-200 shadow-lg z-20">
-    
-    <!-- 1. Header Sidebar -->
     <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-blue-600 text-white shadow-sm">
       <div class="font-extrabold text-xl tracking-tight">
         <i class="fas fa-comment-dots mr-2"></i> Chat App
@@ -13,7 +10,6 @@
       </div>
     </div>
 
-    <!-- 2. Ô TÌM KIẾM / TẠO CHAT MỚI -->
     <div class="p-4 bg-gray-50 border-b border-gray-200">
         <div class="relative group">
             <input 
@@ -34,7 +30,6 @@
         </div>
     </div>
     
-    <!-- 3. Danh sách phòng chat -->
     <div class="overflow-y-auto flex-1 p-2 space-y-1 custom-scrollbar">
       @if (chatRooms().length === 0) {
         <div class="flex flex-col items-center justify-center h-40 text-gray-400 text-sm italic px-4 text-center animate-fade-in">
@@ -57,7 +52,6 @@
           <div class="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 transform -translate-x-full transition-transform duration-200"
                [class.translate-x-0]="selectedUser()?.id === getRecipientId(room)"></div>
           
-          <!-- Avatar -->
           <div class="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md ring-2 ring-white">
             {{ getDisplayName(room).charAt(0) | uppercase }}
           </div>
@@ -78,10 +72,8 @@
     </div>
   </div>
 
-  <!-- MAIN CHAT: CỬA SỔ CHAT -->
   <div class="flex flex-col flex-1 h-full relative bg-[#F0F2F5]">
     
-    <!-- 1. Chat Header (ĐÃ CẬP NHẬT LOGIC STATUS) -->
     <div class="h-16 bg-white border-b border-gray-200 flex items-center px-6 justify-between shadow-sm z-10">
       @if (selectedUser()) {
         <div class="flex items-center animate-fade-in">
@@ -90,7 +82,6 @@
                  {{ selectedUser().name.charAt(0) | uppercase }}
               </div>
               
-              <!-- Chấm Online/Offline (Dynamic) -->
               <span class="absolute bottom-0 right-0 w-3 h-3 border-2 border-white rounded-full transition-colors duration-300"
                     [class.bg-green-500]="partnerStatus() === 'ONLINE'"
                     [class.bg-gray-400]="partnerStatus() === 'OFFLINE'">
@@ -100,7 +91,6 @@
           <div class="ml-3">
               <h2 class="font-bold text-gray-800 text-base leading-tight">{{ selectedUser().name }}</h2>
               
-              <!-- Dòng trạng thái text (Last Seen) -->
               <span class="text-xs font-medium transition-colors duration-300 flex items-center gap-1"
                     [class.text-green-600]="partnerStatus() === 'ONLINE'"
                     [class.text-gray-500]="partnerStatus() === 'OFFLINE'">
@@ -116,7 +106,6 @@
       }
     </div>
 
-    <!-- 2. Message List Area -->
     <div id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar scroll-smooth">
       @if (!selectedUser()) {
           <div class="h-full flex flex-col items-center justify-center text-gray-400 animate-fade-in">
@@ -135,7 +124,13 @@
                   ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm' 
                   : 'bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-tl-sm'">
             
-            <p class="leading-relaxed whitespace-pre-wrap break-words">{{ msg.content }}</p>
+            @if (msg.type === MessageType.IMAGE) {
+                <div class="rounded-lg overflow-hidden cursor-pointer">
+                    <img [src]="msg.content" alt="Image sent" class="max-w-full max-h-[300px] object-cover hover:scale-105 transition-transform duration-300">
+                </div>
+            } @else {
+                <p class="leading-relaxed whitespace-pre-wrap break-words">{{ msg.content }}</p>
+            }
             
             <span class="text-[10px] mt-1 block opacity-70 font-medium tracking-wide" 
                   [ngClass]="{'text-blue-100 text-right': msg.senderId === currentUser().id, 'text-gray-400': msg.senderId !== currentUser().id}">
@@ -145,7 +140,6 @@
         </div>
       }
 
-      <!-- Animation Đang nhập... -->
       @if (isRecipientTyping()) {
         <div class="flex w-full animate-slide-up mt-2">
           <div class="flex items-center gap-2">
@@ -160,9 +154,20 @@
       }
     </div>
 
-    <!-- 3. Input Area -->
     <div class="p-4 bg-white border-t border-gray-200">
       <div class="flex gap-3 items-end max-w-5xl mx-auto">
+        
+        <div class="relative">
+             <input type="file" #fileInput (change)="onFileSelected($event)" accept="image/*" class="hidden">
+             <button 
+                (click)="fileInput.click()"
+                [disabled]="!selectedUser()"
+                class="bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full w-12 h-12 flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                title="Gửi ảnh">
+                <i class="fas fa-paperclip text-lg"></i>
+             </button>
+        </div>
+
         <div class="flex-1 relative">
             <input 
               type="text" 

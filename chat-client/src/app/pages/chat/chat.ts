@@ -1,11 +1,11 @@
-// ... imports giữ nguyên
 import { Component, OnInit, OnDestroy, signal, effect } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common'; 
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
-import { ChatMessage, ChatRoom, TypingMessage, UserStatus } from '../../models/chat.models';
+// [1] Import thêm MessageType
+import { ChatMessage, ChatRoom, TypingMessage, UserStatus, MessageType } from '../../models/chat.models';
 
 @Component({
   selector: 'app-chat',
@@ -37,6 +37,9 @@ export class Chat implements OnInit, OnDestroy {
 
   // --- CACHE TÊN USER ---
   private userCache = new Map<string, string>(); 
+
+  // Để dùng Enum trong HTML (ngIf)
+  MessageType = MessageType; 
 
   constructor(
     private chatService: ChatService, 
@@ -151,30 +154,55 @@ export class Chat implements OnInit, OnDestroy {
     });
   }
 
-  // --- HÀM ĐÃ SỬA: Luôn hiển thị text "Hoạt động..." ---
   getLastSeenText(): string {
-      // 1. Nếu đang Online
       if (this.partnerStatus() === 'ONLINE') return 'Đang hoạt động';
-      
-      // 2. Nếu không có dữ liệu (null) -> Coi như đã off rất lâu -> "3 tháng trước"
       if (!this.lastSeen()) return 'Hoạt động 3 tháng trước';
-
       const now = new Date();
-      const diff = Math.floor((now.getTime() - this.lastSeen()!.getTime()) / 1000); // Giây
-
-      // 3. Logic hiển thị thời gian tương đối
+      const diff = Math.floor((now.getTime() - this.lastSeen()!.getTime()) / 1000); 
       if (diff < 60) return 'Vừa mới truy cập';
       if (diff < 3600) return `Hoạt động ${Math.floor(diff / 60)} phút trước`;
       if (diff < 86400) return `Hoạt động ${Math.floor(diff / 3600)} giờ trước`;
-      if (diff < 2592000) return `Hoạt động ${Math.floor(diff / 86400)} ngày trước`; // Dưới 30 ngày
-      if (diff < 7776000) return `Hoạt động ${Math.floor(diff / 2592000)} tháng trước`; // Dưới 3 tháng (90 ngày)
-
-      // 4. Nếu quá 3 tháng -> "3 tháng trước"
+      if (diff < 2592000) return `Hoạt động ${Math.floor(diff / 86400)} ngày trước`;
+      if (diff < 7776000) return `Hoạt động ${Math.floor(diff / 2592000)} tháng trước`;
       return 'Hoạt động 3 tháng trước';
   }
 
-  // ... (Các hàm khác giữ nguyên) ...
-  
+  // --- [MỚI] HÀM XỬ LÝ CHỌN FILE ẢNH ---
+  onFileSelected(event: any) {
+    const file: File = event.target.files[0];
+    if (!file || !this.selectedUser()) return;
+
+    // TODO: Có thể thêm loading spinner ở đây
+
+    // 1. Upload ảnh
+    this.chatService.uploadImage(file).subscribe({
+        next: (response: any) => {
+            console.log("Upload thành công:", response);
+            const imageUrl = response.url; // URL từ backend trả về
+
+            // 2. Tạo tin nhắn IMAGE
+            const msg: ChatMessage = {
+                senderId: this.currentUser().id,
+                recipientId: this.selectedUser().id,
+                content: imageUrl, // Nội dung là URL
+                timestamp: new Date(),
+                type: MessageType.IMAGE // Quan trọng: Đánh dấu là ảnh
+            };
+
+            // 3. Gửi qua WebSocket
+            const isSent = this.chatService.sendMessage(msg);
+            if (isSent) {
+                this.messages.update(old => [...old, msg]);
+                this.scrollToBottom();
+            }
+        },
+        error: (err) => {
+            console.error("Lỗi upload ảnh:", err);
+            alert("Upload ảnh thất bại! Vui lòng thử lại.");
+        }
+    });
+  }
+
   onInputTyping() {
     if (!this.selectedUser()) return;
     const typingMsg: TypingMessage = {
@@ -206,12 +234,22 @@ export class Chat implements OnInit, OnDestroy {
     });
   }
 
+  // --- [SỬA] GỬI TIN NHẮN CHỮ ---
   sendMessage() {
     if (!this.newMessage.trim() || !this.selectedUser()) return;
-    const msg: ChatMessage = { senderId: this.currentUser().id, recipientId: this.selectedUser().id, content: this.newMessage, timestamp: new Date() };
+    
+    const msg: ChatMessage = { 
+        senderId: this.currentUser().id, 
+        recipientId: this.selectedUser().id, 
+        content: this.newMessage, 
+        timestamp: new Date(),
+        type: MessageType.TEXT // Gán cứng là TEXT
+    };
+
     const isSent = this.chatService.sendMessage(msg);
     if (isSent) { 
-        this.messages.update(old => [...old, msg]); this.newMessage = ''; 
+        this.messages.update(old => [...old, msg]); 
+        this.newMessage = ''; 
         if (this.typingTimeout) clearTimeout(this.typingTimeout); 
     } 
     else { alert('Không thể gửi tin nhắn. Vui lòng kiểm tra kết nối mạng!'); }

@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { ChatMessage, ChatRoom, TypingMessage, UserStatus } from '../models/chat.models'; 
+// Nhớ import MessageType từ file model
+import { ChatMessage, ChatRoom, TypingMessage, UserStatus, MessageType } from '../models/chat.models'; 
 import { Observable, Subject } from 'rxjs';
 
 import SockJS from 'sockjs-client';
@@ -10,7 +11,7 @@ import { Stomp } from '@stomp/stompjs';
   providedIn: 'root'
 })
 export class ChatService {
-  // Đảm bảo URL này trỏ đúng vào API Gateway (vd: http://localhost:8080)
+  // Trỏ vào API Gateway (Port 8080)
   private apiUrl = 'http://localhost:8080'; 
   private stompClient: any;
   
@@ -20,14 +21,24 @@ export class ChatService {
 
   constructor(private http: HttpClient) { }
 
+  // --- [MỚI] HÀM UPLOAD ẢNH ---
+  // Gọi sang Media Service thông qua Gateway
+  uploadImage(file: File): Observable<any> {
+    const formData = new FormData();
+    // Key 'file' phải khớp với @RequestParam("file") bên Java
+    formData.append('file', file);
+    
+    // Gọi API POST /api/v1/media/upload
+    return this.http.post(`${this.apiUrl}/api/v1/media/upload`, formData);
+  }
+
   connect(currentUser: any): void {
     if (this.stompClient && this.stompClient.connected) {
       return;
     }
     
-    // Sử dụng Factory function để hỗ trợ reconnect
     this.stompClient = Stomp.over(() => new SockJS(`${this.apiUrl}/ws`));
-    // this.stompClient.debug = () => {}; 
+    // this.stompClient.debug = () => {}; // Bỏ comment nếu muốn xem log STOMP
 
     const _this = this;
     this.stompClient.connect({}, function (frame: any) {
@@ -47,18 +58,22 @@ export class ChatService {
              };
              _this.typingSubject.next(typingMsg);
           } else {
+             // Mapping tin nhắn nhận được
              const chatMessage: ChatMessage = {
+                 id: payload.id,
                  senderId: payload.senderId,
                  recipientId: payload.recipientId,
                  content: payload.content,
-                 timestamp: new Date()
+                 timestamp: new Date(),
+                 // [QUAN TRỌNG] Lấy type từ server về. Nếu không có thì mặc định là TEXT
+                 type: payload.type || MessageType.TEXT 
              };
              _this.messageSubject.next(chatMessage);
           }
         }
       });
 
-      // 2. Báo danh Online ngay khi kết nối
+      // 2. Báo danh Online
       _this.stompClient.send("/app/user.addUser", {}, currentUser.id);
       
     }, function(error: any) {
@@ -67,7 +82,6 @@ export class ChatService {
     });
   }
 
-  // Lắng nghe trạng thái Real-time
   subscribeToStatus(partnerId: string) {
     if (this.stompClient && this.stompClient.connected) {
         return this.stompClient.subscribe(`/topic/status/${partnerId}`, (msg: any) => {
@@ -80,8 +94,6 @@ export class ChatService {
     return null;
   }
 
-  // --- SỬA ĐƯỜNG DẪN API TẠI ĐÂY ---
-  // Đổi thành /rooms/status/{userId} để khớp với ChatController
   getUserStatus(userId: string): Observable<UserStatus> {
       return this.http.get<UserStatus>(`${this.apiUrl}/rooms/status/${userId}`);
   }
