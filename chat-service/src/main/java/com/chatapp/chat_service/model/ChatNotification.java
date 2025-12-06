@@ -1,5 +1,6 @@
 package com.chatapp.chat_service.model;
 
+import com.chatapp.chat_service.enums.MessageType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,4 +15,7 @@ public class ChatNotification {
     private String senderId;
     private String recipientId;
     private String content;
+
+    // --- [THÊM MỚI] ---
+    private MessageType type;
 }

@@ -45,8 +45,10 @@ public class ChatController {
                 chatMessage.setChatId(chatIdSender.get());
             }
 
+            // Lưu tin nhắn (Bao gồm cả trường type vừa thêm)
             ChatMessage savedMsg = chatMessageService.save(chatMessage);
 
+            // Gửi thông báo realtime cho người nhận
             messagingTemplate.convertAndSend(
                     "/topic/" + chatMessage.getRecipientId(),
                     ChatNotification.builder()
@@ -54,6 +56,7 @@ public class ChatController {
                             .senderId(savedMsg.getSenderId())
                             .recipientId(savedMsg.getRecipientId())
                             .content(savedMsg.getContent())
+                            .type(savedMsg.getType()) // [QUAN TRỌNG] Truyền type về cho FE
                             .build()
             );
         } catch (Exception e) {
@@ -96,7 +99,6 @@ public class ChatController {
 
             userStatusService.saveUserOffline(userId);
 
-            // Gửi thông báo Offline kèm thời gian LastSeen
             messagingTemplate.convertAndSend("/topic/status/" + userId,
                     Map.of(
                             "status", "OFFLINE",
@@ -107,13 +109,9 @@ public class ChatController {
         }
     }
 
-    // --- 5. SỬA ĐỔI: API lấy trạng thái hiện tại ---
-    // Đổi đường dẫn thành /rooms/status/{userId} để đi qua Gateway dễ dàng hơn
     @GetMapping("/rooms/status/{userId}")
     public ResponseEntity<UserStatus> getUserStatus(@PathVariable String userId) {
-        System.out.println("DEBUG: API lấy status cho user: " + userId);
         UserStatus status = userStatusService.getUserStatus(userId);
-        System.out.println("DEBUG: Kết quả: " + status);
         return ResponseEntity.ok(status);
     }
 
