@@ -1,6 +1,7 @@
 <div class="flex h-screen bg-gray-100 antialiased text-gray-800">
   
   <div class="flex flex-col w-80 bg-white border-r border-gray-200 shadow-lg z-20">
+    
     <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-blue-600 text-white shadow-sm">
       <div class="font-extrabold text-xl tracking-tight">
         <i class="fas fa-comment-dots mr-2"></i> Chat App
@@ -126,9 +127,32 @@
             
             @if (msg.type === MessageType.IMAGE) {
                 <div class="rounded-lg overflow-hidden cursor-pointer">
-                    <img [src]="msg.content" alt="Image sent" class="max-w-full max-h-[300px] object-cover hover:scale-105 transition-transform duration-300">
+                    <img [src]="msg.content" alt="Image" class="max-w-full max-h-[300px] object-cover hover:scale-105 transition-transform duration-300">
                 </div>
-            } @else {
+            } 
+            @else if (msg.type === MessageType.VIDEO) {
+                <div class="rounded-lg overflow-hidden bg-black min-w-[200px]">
+                    <video controls class="max-w-full max-h-[300px] w-full">
+                        <source [src]="msg.content">
+                        Trình duyệt không hỗ trợ video.
+                    </video>
+                </div>
+            }
+            @else if (msg.type === MessageType.FILE) {
+                <div (click)="downloadFile(msg.content)" 
+                     class="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer group/file">
+                    
+                    <div class="w-10 h-10 bg-red-100 text-red-500 rounded-full flex items-center justify-center group-hover/file:bg-red-200 transition-colors">
+                        <i class="fas fa-file-alt text-xl"></i>
+                    </div>
+                    
+                    <div class="flex-1 overflow-hidden text-left">
+                        <p class="text-sm font-bold text-gray-700 truncate max-w-[150px]">Tệp đính kèm</p>
+                        <span class="text-xs text-blue-500 hover:underline">Bấm để tải về</span>
+                    </div>
+                </div>
+            }
+            @else {
                 <p class="leading-relaxed whitespace-pre-wrap break-words">{{ msg.content }}</p>
             }
             
@@ -158,12 +182,13 @@
       <div class="flex gap-3 items-end max-w-5xl mx-auto">
         
         <div class="relative">
-             <input type="file" #fileInput (change)="onFileSelected($event)" accept="image/*" class="hidden">
+             <input type="file" #fileInput (change)="onFileSelected($event)" class="hidden">
+             
              <button 
                 (click)="fileInput.click()"
                 [disabled]="!selectedUser()"
                 class="bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full w-12 h-12 flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-                title="Gửi ảnh">
+                title="Gửi file">
                 <i class="fas fa-paperclip text-lg"></i>
              </button>
         </div>

@@ -2,9 +2,10 @@ import { Component, OnInit, OnDestroy, signal, effect } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common'; 
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+// [1] Import HttpClient để tải file dạng Blob
+import { HttpClient } from '@angular/common/http'; 
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
-// [1] Import thêm MessageType
 import { ChatMessage, ChatRoom, TypingMessage, UserStatus, MessageType } from '../../models/chat.models';
 
 @Component({
@@ -26,26 +27,26 @@ export class Chat implements OnInit, OnDestroy {
   newMessage = '';
   userToChat = ''; 
 
-  // --- STATE CHO TYPING ---
+  // --- STATE FOR TYPING ---
   isRecipientTyping = signal(false); 
   private typingTimeout: any;
 
-  // --- STATE CHO ONLINE/OFFLINE ---
+  // --- STATE FOR ONLINE/OFFLINE ---
   partnerStatus = signal<string>('OFFLINE');
   lastSeen = signal<Date | null>(null);
   private statusSubscription: any; 
 
-  // --- CACHE TÊN USER ---
   private userCache = new Map<string, string>(); 
 
-  // Để dùng Enum trong HTML (ngIf)
   MessageType = MessageType; 
 
   constructor(
     private chatService: ChatService, 
     private authService: AuthService,
     private router: Router,
-    private datePipe: DatePipe 
+    private datePipe: DatePipe,
+    // [2] Inject HttpClient vào đây
+    private http: HttpClient 
   ) {
     effect(() => {
       if (this.messages().length > 0 || this.isRecipientTyping()) {
@@ -123,7 +124,7 @@ export class Chat implements OnInit, OnDestroy {
             }
         });
       },
-      error: (err) => console.error('Lỗi tải phòng chat', err)
+      error: (err) => console.error('Error loading chat rooms', err)
     });
   }
 
@@ -155,41 +156,70 @@ export class Chat implements OnInit, OnDestroy {
   }
 
   getLastSeenText(): string {
-      if (this.partnerStatus() === 'ONLINE') return 'Đang hoạt động';
-      if (!this.lastSeen()) return 'Hoạt động 3 tháng trước';
+      if (this.partnerStatus() === 'ONLINE') return 'Active now';
+      if (!this.lastSeen()) return 'Active 3 months ago';
       const now = new Date();
       const diff = Math.floor((now.getTime() - this.lastSeen()!.getTime()) / 1000); 
-      if (diff < 60) return 'Vừa mới truy cập';
-      if (diff < 3600) return `Hoạt động ${Math.floor(diff / 60)} phút trước`;
-      if (diff < 86400) return `Hoạt động ${Math.floor(diff / 3600)} giờ trước`;
-      if (diff < 2592000) return `Hoạt động ${Math.floor(diff / 86400)} ngày trước`;
-      if (diff < 7776000) return `Hoạt động ${Math.floor(diff / 2592000)} tháng trước`;
-      return 'Hoạt động 3 tháng trước';
+      if (diff < 60) return 'Active just now';
+      if (diff < 3600) return `Active ${Math.floor(diff / 60)} minutes ago`;
+      if (diff < 86400) return `Active ${Math.floor(diff / 3600)} hours ago`;
+      if (diff < 2592000) return `Active ${Math.floor(diff / 86400)} days ago`;
+      if (diff < 7776000) return `Active ${Math.floor(diff / 2592000)} months ago`;
+      return 'Active 3 months ago';
   }
 
-  // --- [MỚI] HÀM XỬ LÝ CHỌN FILE ẢNH ---
+  // --- [3] HÀM DOWNLOAD FILE NÉ IDM ---
+  downloadFile(url: string, fileName: string = 'downloaded-file') {
+    // Gọi HTTP GET để lấy dữ liệu dạng BLOB (Binary Large Object)
+    this.http.get(url, { responseType: 'blob' }).subscribe({
+      next: (blob) => {
+        // Tạo URL ảo trong bộ nhớ trình duyệt
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        // Tạo thẻ <a> ẩn để kích hoạt tải xuống
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        
+        // Giả lập cú click chuột (IDM sẽ không bắt được cái này)
+        a.click();
+        
+        // Dọn dẹp bộ nhớ
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+      },
+      error: (err) => console.error('Download error:', err)
+    });
+  }
+
+  // --- HANDLE FILE SELECTION ---
   onFileSelected(event: any) {
     const file: File = event.target.files[0];
     if (!file || !this.selectedUser()) return;
 
-    // TODO: Có thể thêm loading spinner ở đây
-
-    // 1. Upload ảnh
     this.chatService.uploadImage(file).subscribe({
         next: (response: any) => {
-            console.log("Upload thành công:", response);
-            const imageUrl = response.url; // URL từ backend trả về
+            console.log("Upload successful:", response);
+            // Fix URL Docker -> Localhost
+            const fileUrl = response.url.replace('http://minio:9000', 'http://localhost:9000');
 
-            // 2. Tạo tin nhắn IMAGE
+            let msgType = MessageType.FILE; 
+            
+            if (file.type.startsWith('image/')) {
+                msgType = MessageType.IMAGE;
+            } else if (file.type.startsWith('video/')) {
+                msgType = MessageType.VIDEO;
+            }
+
             const msg: ChatMessage = {
                 senderId: this.currentUser().id,
                 recipientId: this.selectedUser().id,
-                content: imageUrl, // Nội dung là URL
+                content: fileUrl, 
                 timestamp: new Date(),
-                type: MessageType.IMAGE // Quan trọng: Đánh dấu là ảnh
+                type: msgType
             };
 
-            // 3. Gửi qua WebSocket
             const isSent = this.chatService.sendMessage(msg);
             if (isSent) {
                 this.messages.update(old => [...old, msg]);
@@ -197,8 +227,8 @@ export class Chat implements OnInit, OnDestroy {
             }
         },
         error: (err) => {
-            console.error("Lỗi upload ảnh:", err);
-            alert("Upload ảnh thất bại! Vui lòng thử lại.");
+            console.error("Upload error:", err);
+            alert("Upload failed! File too large or server error.");
         }
     });
   }
@@ -224,17 +254,16 @@ export class Chat implements OnInit, OnDestroy {
     this.authService.checkUserExists(usernameInput).subscribe({
       next: (res: any) => {
         const realRecipientId = res.userId; const realUsername = res.username;
-        if (realRecipientId === this.currentUser().id) { alert('Bạn không thể chat với chính mình!'); return; }
+        if (realRecipientId === this.currentUser().id) { alert('You cannot chat with yourself!'); return; }
         const existingRoom = this.chatRooms().find(r => r.senderId === realRecipientId || r.recipientId === realRecipientId);
         if (existingRoom) { if (!existingRoom.chatName) existingRoom.chatName = realUsername; this.onSelectUser(existingRoom); this.userToChat = ''; return; }
         const newRoom: ChatRoom = { id: 'temp_' + Date.now(), chatId: `${this.currentUser().id}_${realRecipientId}`, senderId: this.currentUser().id, recipientId: realRecipientId, chatName: realUsername };
         this.chatRooms.update(rooms => [newRoom, ...rooms]); this.onSelectUser(newRoom); this.userToChat = '';
       },
-      error: (err) => { if (err.status === 404) alert(`Người dùng "${usernameInput}" không tồn tại!`); else console.error(err); }
+      error: (err) => { if (err.status === 404) alert(`User "${usernameInput}" not found!`); else console.error(err); }
     });
   }
 
-  // --- [SỬA] GỬI TIN NHẮN CHỮ ---
   sendMessage() {
     if (!this.newMessage.trim() || !this.selectedUser()) return;
     
@@ -243,7 +272,7 @@ export class Chat implements OnInit, OnDestroy {
         recipientId: this.selectedUser().id, 
         content: this.newMessage, 
         timestamp: new Date(),
-        type: MessageType.TEXT // Gán cứng là TEXT
+        type: MessageType.TEXT 
     };
 
     const isSent = this.chatService.sendMessage(msg);
@@ -252,7 +281,7 @@ export class Chat implements OnInit, OnDestroy {
         this.newMessage = ''; 
         if (this.typingTimeout) clearTimeout(this.typingTimeout); 
     } 
-    else { alert('Không thể gửi tin nhắn. Vui lòng kiểm tra kết nối mạng!'); }
+    else { alert('Could not send message. Please check your connection!'); }
   }
 
   getDisplayName(room: ChatRoom): string { if (room.chatName) return room.chatName; return room.senderId === this.currentUser().id ? room.recipientId : room.senderId; }
