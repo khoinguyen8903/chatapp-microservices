@@ -6,7 +6,6 @@ import org.springframework.security.config.annotation.web.reactive.EnableWebFlux
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 
-
 public class ApiGatewaySecurityConfig {
 
     @Bean
@@ -20,6 +19,7 @@ public class ApiGatewaySecurityConfig {
                         .pathMatchers("/api/auth/**", "/api/chat/**", "/ws/**").permitAll()
 
                         .pathMatchers("/eureka/**").permitAll()
+                        .pathMatchers("/api/v1/media/**").permitAll()
                         .anyExchange().authenticated()
                 );
         return http.build();

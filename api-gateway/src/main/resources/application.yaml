@@ -12,7 +12,7 @@ spring:
   cloud:
     gateway:
       routes:
-        # 1. AUTH SERVICE (Đã bỏ StripPrefix)
+        # 1. AUTH SERVICE
         - id: auth-service
           uri: http://auth-service:8081
           predicates:
@@ -44,6 +44,15 @@ spring:
           predicates:
             - Path=/ws/**
           filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+
+        # 5. [MỚI] MEDIA SERVICE - Upload & Xem ảnh
+        - id: media-service
+          uri: http://media-service:8083
+          predicates:
+            - Path=/api/v1/media/**
+          filters:
+            - AuthenticationFilter # Yêu cầu đăng nhập mới được upload
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
 jwt:
