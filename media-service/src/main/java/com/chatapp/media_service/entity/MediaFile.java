@@ -1,12 +1,10 @@
 package com.chatapp.media_service.entity;
 
-
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
 import java.time.LocalDateTime;
 
 @Entity
@@ -21,14 +19,16 @@ public class MediaFile {
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    private String fileName;    // Tên file gốc
-    private String contentType; // image/png, video/mp4...
-    private String url;         // Đường dẫn truy cập file
+    private String fileName;
+    private String contentType;
 
-    private Long size;          // Kích thước file (bytes)
+    // --- [SỬA LẠI DÒNG NÀY] ---
+    // Chuyển sang kiểu TEXT để lưu chuỗi siêu dài (không giới hạn 255 ký tự nữa)
+    @Column(columnDefinition = "TEXT")
+    private String url;
 
+    private Long size;
     private String uploaderId;
-
     private LocalDateTime createdAt;
 
     @PrePersist

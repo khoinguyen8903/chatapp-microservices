@@ -54,7 +54,7 @@
                [class.translate-x-0]="selectedUser()?.id === getRecipientId(room)"></div>
           
           <div class="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md ring-2 ring-white">
-            {{ getDisplayName(room).charAt(0) | uppercase }}
+            {{ (getDisplayName(room) || '?').charAt(0) | uppercase }}
           </div>
           
           <div class="ml-3 truncate flex-1">
@@ -80,7 +80,7 @@
         <div class="flex items-center animate-fade-in">
           <div class="relative">
               <div class="w-10 h-10 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 flex items-center justify-center text-white font-bold text-lg shadow-sm">
-                 {{ selectedUser().name.charAt(0) | uppercase }}
+                 {{ (selectedUser().name || '?').charAt(0) | uppercase }}
               </div>
               
               <span class="absolute bottom-0 right-0 w-3 h-3 border-2 border-white rounded-full transition-colors duration-300"
@@ -118,7 +118,7 @@
           </div>
       }
 
-      @for (msg of messages(); track msg.id) {
+      @for (msg of messages(); track $index) {
         <div class="flex w-full animate-slide-up" [ngClass]="{'justify-end': msg.senderId === currentUser().id}">
           <div class="max-w-[75%] px-4 py-2 shadow-sm text-[15px] relative group transition-all hover:shadow-md"
                [ngClass]="msg.senderId === currentUser().id 
@@ -127,31 +127,37 @@
             
             @if (msg.type === MessageType.IMAGE) {
                 <div class="rounded-lg overflow-hidden cursor-pointer">
-                    <img [src]="msg.content" alt="Image" class="max-w-full max-h-[300px] object-cover hover:scale-105 transition-transform duration-300">
+                    <img [src]="sanitizeUrl(msg.content)" alt="Image" class="max-w-full max-h-[300px] object-cover hover:scale-105 transition-transform duration-300">
                 </div>
             } 
+            
             @else if (msg.type === MessageType.VIDEO) {
                 <div class="rounded-lg overflow-hidden bg-black min-w-[200px]">
                     <video controls class="max-w-full max-h-[300px] w-full">
-                        <source [src]="msg.content">
+                        <source [src]="sanitizeUrl(msg.content)">
                         Trình duyệt không hỗ trợ video.
                     </video>
                 </div>
             }
+            
             @else if (msg.type === MessageType.FILE) {
-                <div (click)="downloadFile(msg.content)" 
-                     class="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer group/file">
-                    
-                    <div class="w-10 h-10 bg-red-100 text-red-500 rounded-full flex items-center justify-center group-hover/file:bg-red-200 transition-colors">
-                        <i class="fas fa-file-alt text-xl"></i>
-                    </div>
-                    
-                    <div class="flex-1 overflow-hidden text-left">
-                        <p class="text-sm font-bold text-gray-700 truncate max-w-[150px]">Tệp đính kèm</p>
-                        <span class="text-xs text-blue-500 hover:underline">Bấm để tải về</span>
-                    </div>
-                </div>
+                <a [href]="sanitizeUrl(msg.content)" 
+                   target="_blank" 
+                   class="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer group/file text-decoration-none">
+                   
+                   <div class="w-10 h-10 bg-red-100 text-red-500 rounded-full flex items-center justify-center group-hover/file:bg-red-200 transition-colors">
+                       <i class="fas fa-file-alt text-xl"></i>
+                   </div>
+                   
+                   <div class="flex-1 overflow-hidden text-left">
+                       <p class="text-sm font-bold text-gray-700 truncate max-w-[150px]">
+                           {{ msg.fileName || getFileNameFromUrl(msg.content) }}
+                       </p>
+                       <span class="text-xs text-blue-500 hover:underline">Bấm để tải về</span>
+                   </div>
+               </a>
             }
+            
             @else {
                 <p class="leading-relaxed whitespace-pre-wrap break-words">{{ msg.content }}</p>
             }

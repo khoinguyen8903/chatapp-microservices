@@ -11,12 +11,14 @@ export interface ChatMessage {
   chatId?: string;
   senderId: string;
   recipientId: string;
-  content: string; // Nếu type=IMAGE thì đây là URL ảnh
+  content: string; // Nếu type=IMAGE/FILE thì đây là URL
   timestamp?: Date;
   
-  // [MỚI] Thêm trường này để phân loại
   // Dấu ? để tương thích với các tin nhắn cũ chưa có type
   type?: MessageType; 
+
+  // --- [MỚI] Thêm trường fileName để sửa lỗi TypeScript ---
+  fileName?: string; 
 }
 
 export interface ChatRoom {
@@ -24,7 +26,15 @@ export interface ChatRoom {
   chatId: string;
   senderId: string;
   recipientId: string;
+  
+  // Tên hiển thị (Username hoặc Tên nhóm)
   chatName?: string; 
+
+  // Các trường hỗ trợ Chat Nhóm
+  isGroup?: boolean;        // Đánh dấu là nhóm
+  groupName?: string;       // Tên nhóm (nếu có)
+  adminId?: string;         // ID trưởng nhóm
+  memberIds?: string[];     // Danh sách thành viên
 }
 
 export interface TypingMessage {
