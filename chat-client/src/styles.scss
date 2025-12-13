@@ -1,3 +1,13 @@
+/* src/style.scss */
 @tailwind base;
 @tailwind components;
-@tailwind utilities;/* You can add global styles to this file, and also import other style files */
+@tailwind utilities;
+
+/* Thêm đoạn này để đảm bảo app luôn full màn hình */
+html, body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Ẩn thanh cuộn của trình duyệt, chỉ dùng thanh cuộn trong app chat */
+}

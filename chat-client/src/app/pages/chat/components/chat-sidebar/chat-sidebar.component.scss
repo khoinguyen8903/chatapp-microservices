@@ -1,0 +1,9 @@
+/* src/app/pages/chat/components/chat-sidebar/chat-sidebar.component.scss */
+
+:host {
+  display: flex;        /* Dùng flex để dễ kiểm soát con bên trong */
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}

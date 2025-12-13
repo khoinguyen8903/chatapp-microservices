@@ -1,64 +1,34 @@
-// Tùy chỉnh thanh cuộn cho gọn đẹp (Webkit browsers: Chrome, Safari, Edge)
-.custom-scrollbar {
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  
-  &::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1; // gray-300
-    border-radius: 20px;
-    border: 2px solid transparent;
-    background-clip: content-box;
-  }
-  
-  &:hover::-webkit-scrollbar-thumb {
-    background-color: #94a3b8; // gray-400
-  }
+/* src/app/pages/chat/chat.scss */
+
+:host {
+  display: block;
+  width: 100vw;       /* Dùng vw để chắc chắn full chiều ngang viewport */
+  height: 100vh;      /* Dùng vh để chắc chắn full chiều cao viewport */
+  overflow: hidden;   /* Cắt bỏ phần thừa */
 }
 
-// Animations
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.chat-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background-color: #f0f2f5;
+  overflow: hidden; 
 }
 
-@keyframes slideUp {
-  from { 
-    opacity: 0; 
-    transform: translateY(10px); 
-  }
-  to { 
-    opacity: 1; 
-    transform: translateY(0); 
-  }
+.sidebar-wrapper {
+  width: 320px;
+  min-width: 320px;   /* Cứng chiều rộng */
+  height: 100%;
+  border-right: 1px solid #e5e7eb;
+  background-color: #fff;
+  display: flex;      /* Quan trọng: để component con bên trong giãn full */
+  flex-direction: column;
 }
 
-@keyframes bounceX {
-  0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(-5px); }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
-}
-
-.animate-slide-up {
-  animation: slideUp 0.3s ease-out forwards;
-}
-
-.animate-bounce-x {
-  animation: bounceX 1s infinite;
-}
-
-// Class hỗ trợ animation Typing (Dấu chấm nhảy múa)
-.delay-75 {
-  animation-delay: 75ms;
-}
-
-.delay-150 {
-  animation-delay: 150ms;
+.window-wrapper {
+  flex: 1;            /* Chiếm hết phần còn lại */
+  height: 100%;
+  min-width: 0;       /* Fix lỗi flexbox bị tràn text */
+  display: flex;      /* Quan trọng */
+  flex-direction: column;
 }
