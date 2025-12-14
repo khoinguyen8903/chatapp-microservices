@@ -31,38 +31,36 @@ public class ChatController {
     @Autowired private ChatRoomService chatRoomService;
     @Autowired private UserStatusService userStatusService;
 
-    // 1. Xử lý tin nhắn Chat (Đã cập nhật logic Nhóm)
+    // 1. Chat Message Processing (Updated for Groups & 1-1 Fix)
     @MessageMapping("/chat")
     public void processMessage(@Payload ChatMessage chatMessage) {
         try {
-            // Kiểm tra xem recipientId có phải là một Chat ID của Group không
+            // Check if recipientId is a Group Chat ID
             Optional<ChatRoom> groupRoom = chatRoomService.findByChatId(chatMessage.getRecipientId());
 
             if (groupRoom.isPresent() && groupRoom.get().isGroup()) {
-                // --- TRƯỜNG HỢP CHAT NHÓM ---
+                // --- GROUP CHAT CASE ---
                 ChatRoom room = groupRoom.get();
-                chatMessage.setChatId(room.getChatId()); // Đảm bảo message lưu đúng chatId của nhóm
+                chatMessage.setChatId(room.getChatId()); // Ensure message saves with group chatId
 
-                // Lưu tin nhắn
+                // Save message
                 ChatMessage savedMsg = chatMessageService.save(chatMessage);
 
-                // Gửi tin nhắn cho TẤT CẢ thành viên trong nhóm (Fan-out)
+                // Fan-out: Send to ALL members (including sender)
                 for (String memberId : room.getMemberIds()) {
-                    // Không gửi lại cho chính người gửi (để tránh double tin nhắn ở FE nếu FE đã tự add)
-                    // Tuy nhiên với logic FE hiện tại thì cứ gửi hết cũng được, FE tự filter hoặc replace
                     messagingTemplate.convertAndSend(
-                            "/topic/" + memberId, // Gửi vào hòm thư riêng của từng thành viên
+                            "/topic/" + memberId, // Send to each member's personal queue
                             ChatNotification.builder()
                                     .id(savedMsg.getId())
                                     .senderId(savedMsg.getSenderId())
-                                    .recipientId(room.getChatId()) // Người nhận hiển thị là Group ID
+                                    .recipientId(room.getChatId()) // Recipient shows as Group ID
                                     .content(savedMsg.getContent())
                                     .type(savedMsg.getType())
                                     .build()
                     );
                 }
             } else {
-                // --- TRƯỜNG HỢP CHAT 1-1 (Logic cũ) ---
+                // --- 1-1 CHAT CASE (Fixed) ---
                 Optional<String> chatIdSender = chatRoomService.getChatRoomId(
                         chatMessage.getSenderId(), chatMessage.getRecipientId(), true);
 
@@ -75,16 +73,25 @@ public class ChatController {
 
                 ChatMessage savedMsg = chatMessageService.save(chatMessage);
 
-                // Gửi cho người nhận
+                // Create Notification Object
+                ChatNotification notification = ChatNotification.builder()
+                        .id(savedMsg.getId())
+                        .senderId(savedMsg.getSenderId())
+                        .recipientId(savedMsg.getRecipientId())
+                        .content(savedMsg.getContent())
+                        .type(savedMsg.getType())
+                        .build();
+
+                // 1. Send to RECIPIENT
                 messagingTemplate.convertAndSend(
                         "/topic/" + chatMessage.getRecipientId(),
-                        ChatNotification.builder()
-                                .id(savedMsg.getId())
-                                .senderId(savedMsg.getSenderId())
-                                .recipientId(savedMsg.getRecipientId())
-                                .content(savedMsg.getContent())
-                                .type(savedMsg.getType())
-                                .build()
+                        notification
+                );
+
+                // 2. [NEW] Send back to SENDER (So sender sees their own message)
+                messagingTemplate.convertAndSend(
+                        "/topic/" + chatMessage.getSenderId(),
+                        notification
                 );
             }
         } catch (Exception e) {
@@ -92,7 +99,7 @@ public class ChatController {
         }
     }
 
-    // --- API TẠO NHÓM MỚI ---
+    // --- API CREATE GROUP ---
     @PostMapping("/rooms/group")
     public ResponseEntity<ChatRoom> createGroup(@RequestBody Map<String, Object> payload) {
         String groupName = (String) payload.get("groupName");
@@ -102,16 +109,16 @@ public class ChatController {
         return ResponseEntity.ok(chatRoomService.createGroupChat(adminId, groupName, memberIds));
     }
 
-    // 2. Xử lý sự kiện Typing (Đã nâng cấp cho Nhóm)
+    // 2. Typing Event Processing
     @MessageMapping("/typing")
     public void processTyping(@Payload TypingMessage typingMessage) {
-        // Kiểm tra xem recipientId có phải là Group không
+        // Check if recipientId is a Group
         Optional<ChatRoom> groupRoom = chatRoomService.findByChatId(typingMessage.getRecipientId());
 
         if (groupRoom.isPresent() && groupRoom.get().isGroup()) {
-            // --- TRƯỜNG HỢP CHAT NHÓM ---
+            // --- GROUP CASE ---
             ChatRoom room = groupRoom.get();
-            // Gửi sự kiện typing cho tất cả thành viên TRỪ người gửi
+            // Send typing event to all members EXCEPT sender
             for (String memberId : room.getMemberIds()) {
                 if (!memberId.equals(typingMessage.getSenderId())) {
                     messagingTemplate.convertAndSend(
@@ -121,7 +128,7 @@ public class ChatController {
                 }
             }
         } else {
-            // --- TRƯỜNG HỢP CHAT 1-1 ---
+            // --- 1-1 CASE ---
             messagingTemplate.convertAndSend(
                     "/topic/" + typingMessage.getRecipientId(),
                     typingMessage
@@ -129,7 +136,7 @@ public class ChatController {
         }
     }
 
-    // 3. Xử lý khi User Online
+    // 3. User Online Processing
     @MessageMapping("/user.addUser")
     public void addUser(@Payload String userId, SimpMessageHeaderAccessor headerAccessor) {
         if (headerAccessor.getSessionAttributes() != null) {
@@ -141,7 +148,7 @@ public class ChatController {
         System.out.println("User Online: " + userId);
     }
 
-    // 4. Xử lý khi User Offline
+    // 4. User Offline Processing
     @EventListener
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.wrap(event.getMessage());
@@ -155,7 +162,7 @@ public class ChatController {
         }
     }
 
-    // 5. API lấy trạng thái
+    // 5. Get User Status API
     @GetMapping("/rooms/status/{userId}")
     public ResponseEntity<UserStatus> getUserStatus(@PathVariable String userId) {
         return ResponseEntity.ok(userStatusService.getUserStatus(userId));
@@ -164,11 +171,7 @@ public class ChatController {
     @GetMapping("/messages/{senderId}/{recipientId}")
     public ResponseEntity<List<ChatMessage>> findChatMessages(@PathVariable String senderId,
                                                               @PathVariable String recipientId) {
-        // Lưu ý: Nếu recipientId là Group ID, logic findChatMessages bên service cần xử lý tìm theo ChatId
-        // Hiện tại service đã có hàm findChatMessages, bạn cần đảm bảo nó xử lý được cả 2 trường hợp
-        // Nếu service chưa xử lý, có thể sửa lại ở đây:
-        // if (chatRoomService.findByChatId(recipientId).isPresent()) { ... return repository.findByChatId(recipientId); }
-
+        // Note: Logic inside service handles both Group (by ChatId) and Private (by sender/recipient)
         return ResponseEntity.ok(chatMessageService.findChatMessages(senderId, recipientId));
     }
 

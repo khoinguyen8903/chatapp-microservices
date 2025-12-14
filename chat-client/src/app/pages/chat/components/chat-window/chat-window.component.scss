@@ -52,3 +52,19 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: #94a3b8;
 }
+
+/* --- [MỚI] CLASS ÉP BUỘC XUỐNG DÒNG --- */
+.message-content {
+  /* Giữ định dạng xuống dòng của người dùng */
+  white-space: pre-wrap; 
+  
+  /* Bắt buộc ngắt dòng tại bất kỳ điểm nào nếu quá dài */
+  word-break: break-word;     /* Hỗ trợ đa số trình duyệt */
+  overflow-wrap: anywhere;    /* Chuẩn mới, cắt link cực tốt */
+  
+  /* Fallback mạnh nhất cho chuỗi ký tự liền nhau (như aaaaaa...) */
+  word-wrap: break-word; 
+  
+  display: block;
+  max-width: 100%;
+}

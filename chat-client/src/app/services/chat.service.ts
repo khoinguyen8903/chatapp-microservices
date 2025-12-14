@@ -1,7 +1,12 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-// Nhớ import MessageType từ file model
-import { ChatMessage, ChatRoom, TypingMessage, UserStatus, MessageType } from '../models/chat.models'; 
+import { 
+  ChatMessage, 
+  ChatRoom, 
+  TypingMessage, 
+  UserStatus, 
+  MessageType 
+} from '../models/chat.models'; 
 import { Observable, Subject } from 'rxjs';
 
 import SockJS from 'sockjs-client';
@@ -21,15 +26,22 @@ export class ChatService {
 
   constructor(private http: HttpClient) { }
 
-  // --- [MỚI] HÀM UPLOAD ẢNH ---
-  // Gọi sang Media Service thông qua Gateway
+  // --- HÀM UPLOAD ẢNH ---
   uploadImage(file: File): Observable<any> {
     const formData = new FormData();
-    // Key 'file' phải khớp với @RequestParam("file") bên Java
     formData.append('file', file);
-    
-    // Gọi API POST /api/v1/media/upload
     return this.http.post(`${this.apiUrl}/api/v1/media/upload`, formData);
+  }
+
+  // --- [MỚI] API TẠO NHÓM ---
+  // Gọi vào Controller: @PostMapping("/rooms/group")
+  createGroup(groupName: string, adminId: string, memberIds: string[]): Observable<ChatRoom> {
+      const payload = {
+          groupName: groupName,
+          adminId: adminId,
+          memberIds: memberIds
+      };
+      return this.http.post<ChatRoom>(`${this.apiUrl}/rooms/group`, payload);
   }
 
   connect(currentUser: any): void {
@@ -44,7 +56,8 @@ export class ChatService {
     this.stompClient.connect({}, function (frame: any) {
       console.log('Connected to STOMP: ' + frame);
 
-      // 1. Subscribe nhận tin nhắn
+      // 1. Subscribe nhận tin nhắn (Dùng chung cho cả Private và Group)
+      // Backend đã tự động định tuyến tin nhắn nhóm vào queue riêng của user này
       _this.stompClient.subscribe(`/topic/${currentUser.id}`, function (msg: any) {
         if (msg.body) {
           const payload = JSON.parse(msg.body);
@@ -53,7 +66,7 @@ export class ChatService {
              const isTypingValue = payload.hasOwnProperty('isTyping') ? payload.isTyping : payload.typing;
              const typingMsg: TypingMessage = {
                  senderId: payload.senderId,
-                 recipientId: payload.recipientId,
+                 recipientId: payload.recipientId, // Nếu là nhóm, đây là GroupID
                  isTyping: isTypingValue
              };
              _this.typingSubject.next(typingMsg);
@@ -62,10 +75,11 @@ export class ChatService {
              const chatMessage: ChatMessage = {
                  id: payload.id,
                  senderId: payload.senderId,
-                 recipientId: payload.recipientId,
+                 // [LƯU Ý]: Nếu là tin nhóm, Backend trả về recipientId = GroupID
+                 // Frontend sẽ dùng ID này để biết tin nhắn thuộc về nhóm nào
+                 recipientId: payload.recipientId, 
                  content: payload.content,
                  timestamp: new Date(),
-                 // [QUAN TRỌNG] Lấy type từ server về. Nếu không có thì mặc định là TEXT
                  type: payload.type || MessageType.TEXT 
              };
              _this.messageSubject.next(chatMessage);
@@ -101,6 +115,7 @@ export class ChatService {
   sendMessage(msg: ChatMessage): boolean {
     if (this.stompClient && this.stompClient.connected) {
         try {
+            // Backend tự phân biệt User hay Group dựa vào recipientId
             this.stompClient.send("/app/chat", {}, JSON.stringify(msg));
             return true;
         } catch (e) {
@@ -119,6 +134,8 @@ export class ChatService {
   }
 
   getChatMessages(senderId: string, recipientId: string): Observable<ChatMessage[]> {
+    // Nếu là Chat nhóm: recipientId chính là GroupID
+    // Backend service đã handle việc tìm tin nhắn theo GroupID
     return this.http.get<ChatMessage[]>(`${this.apiUrl}/messages/${senderId}/${recipientId}`);
   }
 

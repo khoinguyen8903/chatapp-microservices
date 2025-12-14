@@ -1,4 +1,6 @@
-// 1. Định nghĩa các loại tin nhắn (Khớp với Enum Java)
+// src/app/models/chat.models.ts
+
+// 1. Enum Loại tin nhắn
 export enum MessageType {
   TEXT = 'TEXT',
   IMAGE = 'IMAGE',
@@ -6,41 +8,62 @@ export enum MessageType {
   FILE = 'FILE'
 }
 
+// 2. Interface Tin nhắn (Khớp với Java Backend)
 export interface ChatMessage {
   id?: string;
-  chatId?: string;
+  chatId?: string;      // ID phòng chat (Quan trọng với Group)
   senderId: string;
-  recipientId: string;
-  content: string; // Nếu type=IMAGE/FILE thì đây là URL
+  recipientId: string;  // Với Group, cái này là ID nhóm
+  content: string;
   timestamp?: Date;
-  
-  // Dấu ? để tương thích với các tin nhắn cũ chưa có type
-  type?: MessageType; 
+  type?: MessageType;
+  fileName?: string;    // Tên file (nếu có)
 
-  // --- [MỚI] Thêm trường fileName để sửa lỗi TypeScript ---
-  fileName?: string; 
+  senderName?: string;  
 }
 
+// 3. Interface Chat Room (Mapping trực tiếp từ JSON API Backend)
 export interface ChatRoom {
   id: string;
   chatId: string;
   senderId: string;
   recipientId: string;
   
-  // Tên hiển thị (Username hoặc Tên nhóm)
-  chatName?: string; 
-
-  // Các trường hỗ trợ Chat Nhóm
-  isGroup?: boolean;        // Đánh dấu là nhóm
-  groupName?: string;       // Tên nhóm (nếu có)
-  adminId?: string;         // ID trưởng nhóm
-  memberIds?: string[];     // Danh sách thành viên
+  // Các trường Group từ Java Backend
+  isGroup: boolean;     // [QUAN TRỌNG] Khớp với @JsonProperty("isGroup")
+  groupName?: string;
+  adminId?: string;
+  memberIds?: string[]; // Backend trả về List<String>
 }
 
+export interface ChatSession {
+  // ID định danh:
+  // - Nếu là User: id = userId đối phương
+  // - Nếu là Group: id = groupId (chatId)
+  id: string;
+  
+  // Tên hiển thị:
+  // - Nếu là User: Tên người đó
+  // - Nếu là Group: Tên nhóm
+  name: string;
+  
+  avatar?: string;       // URL Avatar
+  
+  type: 'PRIVATE' | 'GROUP'; // Cờ để phân biệt loại chat
+  
+  // Dành riêng cho User
+  status?: 'ONLINE' | 'OFFLINE';
+  lastSeen?: Date;
+  
+  // Dành riêng cho Group
+  memberCount?: number;  // Số lượng thành viên
+}
+
+// 5. Các interface phụ trợ khác
 export interface TypingMessage {
   senderId: string;
   recipientId: string;
-  isTyping: boolean; 
+  isTyping: boolean;
 }
 
 export interface UserStatus {
