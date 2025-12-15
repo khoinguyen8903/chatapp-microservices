@@ -1,0 +1,111 @@
+<!-- Chỉ hiển thị khi trạng thái KHÁC IDLE -->
+<div *ngIf="facade.callState() !== 'IDLE'" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/90 backdrop-blur-sm transition-all duration-300">
+    
+    <!-- CONTAINER CHÍNH -->
+    <div class="relative w-full h-full md:w-[90%] md:h-[90%] md:rounded-3xl overflow-hidden bg-black shadow-2xl flex flex-col">
+        
+        <!-- 1. TRẠNG THÁI: ĐANG KẾT NỐI (CONNECTED) -->
+        <div *ngIf="facade.callState() === 'CONNECTED'" class="relative flex-1 w-full h-full">
+            <!-- Video Đối Phương (Full Screen) -->
+            <video #remoteVideo autoplay playsinline class="w-full h-full object-cover" [class.hidden]="!facade.isVideoCall()"></video>
+            
+            <!-- Video Của Mình (Góc phải - Picture in Picture) -->
+            <div *ngIf="facade.isVideoCall()" class="absolute bottom-24 right-4 w-32 h-48 md:w-48 md:h-72 bg-gray-800 rounded-xl overflow-hidden shadow-lg border-2 border-white/20">
+                <video #localVideo autoplay playsinline class="w-full h-full object-cover transform -scale-x-100"></video>
+                <div *ngIf="isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700 text-white text-xs">
+                    Camera Off
+                </div>
+            </div>
+
+            <!-- GIAO DIỆN VOICE CALL (Hiện Avatar thay vì Video) -->
+            <div *ngIf="!facade.isVideoCall()" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white">
+                <div class="relative mb-8">
+                    <div class="w-40 h-40 rounded-full overflow-hidden border-4 border-gray-700 shadow-2xl">
+                        <img [src]="facade.selectedSession()?.avatar || 'assets/default-avatar.png'" 
+                             class="w-full h-full object-cover">
+                    </div>
+                    <!-- Hiệu ứng sóng âm thanh -->
+                    <div class="absolute inset-0 rounded-full border-4 border-green-500/30 animate-ping"></div>
+                </div>
+                <h2 class="text-3xl font-bold mb-2">{{ facade.selectedSession()?.name }}</h2>
+                <p class="text-gray-400 animate-pulse">Đang đàm thoại...</p>
+                
+                <!-- Vẫn cần thẻ video local để WebRTC hoạt động (nhưng ẩn đi) -->
+                <video #localVideo autoplay playsinline muted class="hidden"></video>
+            </div>
+        </div>
+
+        <!-- 2. TRẠNG THÁI: CHỜ (INCOMING / OUTGOING) -->
+        <div *ngIf="facade.callState() === 'INCOMING' || facade.callState() === 'OUTGOING'" 
+             class="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-gray-800 to-gray-900 text-white z-10">
+            
+            <!-- Avatar to -->
+            <div class="relative mb-6">
+                <div class="w-32 h-32 rounded-full overflow-hidden border-4 border-blue-500 shadow-lg animate-pulse">
+                    <img [src]="facade.selectedSession()?.avatar || 'assets/default-avatar.png'" 
+                         class="w-full h-full object-cover">
+                </div>
+                <!-- Hiệu ứng sóng lan tỏa -->
+                <div class="absolute inset-0 rounded-full border-4 border-blue-400 opacity-50 animate-ping"></div>
+            </div>
+
+            <h2 class="text-2xl font-bold mb-2">{{ facade.selectedSession()?.name }}</h2>
+            
+            <p class="text-blue-300 animate-pulse mb-12">
+                {{ facade.callState() === 'INCOMING' ? 'Đang gọi cho bạn...' : 'Đang kết nối...' }}
+            </p>
+
+            <!-- Nút trả lời (Chỉ hiện khi INCOMING) -->
+            <div *ngIf="facade.callState() === 'INCOMING'" class="flex gap-8">
+                <button (click)="hangup()" 
+                        class="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-transform hover:scale-110 shadow-lg">
+                    <i class="fas fa-phone-slash text-xl"></i>
+                </button>
+                
+                <button (click)="answer()" 
+                        class="w-16 h-16 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center transition-transform hover:scale-110 shadow-lg animate-bounce">
+                    <i class="fas fa-phone text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Nút hủy gọi (Chỉ hiện khi OUTGOING) -->
+            <div *ngIf="facade.callState() === 'OUTGOING'">
+                <button (click)="hangup()" 
+                        class="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-transform hover:scale-110 shadow-lg">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- THANH ĐIỀU KHIỂN (Luôn hiện khi CONNECTED) -->
+        <div *ngIf="facade.callState() === 'CONNECTED'" 
+             class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-4 bg-gray-900/80 backdrop-blur px-6 py-3 rounded-full shadow-2xl border border-white/10 z-20">
+            
+            <!-- Toggle Mic -->
+            <button (click)="toggleMic()" 
+                    [class.bg-white]="!isMicMuted" [class.text-gray-900]="!isMicMuted"
+                    [class.bg-gray-700]="isMicMuted" [class.text-white]="isMicMuted"
+                    class="w-12 h-12 rounded-full flex items-center justify-center transition-all hover:scale-105">
+                <i class="fas" [class.fa-microphone]="!isMicMuted" [class.fa-microphone-slash]="isMicMuted"></i>
+            </button>
+
+            <!-- Toggle Camera -->
+            <button *ngIf="facade.isVideoCall()" (click)="toggleCamera()" 
+                    [class.bg-white]="!isCameraOff" [class.text-gray-900]="!isCameraOff"
+                    [class.bg-gray-700]="isCameraOff" [class.text-white]="isCameraOff"
+                    class="w-12 h-12 rounded-full flex items-center justify-center transition-all hover:scale-105">
+                <i class="fas" [class.fa-video]="!isCameraOff" [class.fa-video-slash]="isCameraOff"></i>
+            </button>
+
+            <!-- End Call -->
+            <button (click)="hangup()" 
+                    class="w-14 h-14 rounded-full bg-red-600 text-white flex items-center justify-center transition-all hover:scale-110 hover:bg-red-700 shadow-lg">
+                <i class="fas fa-phone-slash text-xl"></i>
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- Link FontAwesome nếu chưa có -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">

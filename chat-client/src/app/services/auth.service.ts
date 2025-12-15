@@ -27,7 +27,7 @@ export interface RegisterRequest {
   providedIn: 'root'
 })
 export class AuthService {
-  // Lưu ý: Đảm bảo environment.apiUrl là 'http://localhost:8080' (hoặc cổng gateway của bạn)
+  // Lưu ý: Đảm bảo environment.apiUrl là 'http://192.168.1.9:8080' (hoặc cổng gateway của bạn)
   private apiUrl = `${environment.apiUrl}/api/auth`;
 
   constructor(private http: HttpClient) { }
@@ -35,9 +35,18 @@ export class AuthService {
   // 1. Đăng Nhập
   login(request: LoginRequest): Observable<AuthResponse> {
     return this.http.post<AuthResponse>(`${this.apiUrl}/login`, request).pipe(
-      tap(response => {
-        if (response && response.token) {
-          this.saveSession(response);
+      tap({
+        next: (response) => {
+          alert('Login OK!'); // Nếu thành công thì báo OK
+          if (response && response.token) {
+            this.saveSession(response);
+          }
+        },
+        error: (err) => {
+          // [QUAN TRỌNG] In chi tiết lỗi ra màn hình điện thoại
+          alert(`LỖI: ${err.status} - ${err.statusText}`);
+          alert(`URL gọi: ${err.url}`);
+          alert(`Message: ${err.message}`);
         }
       })
     );

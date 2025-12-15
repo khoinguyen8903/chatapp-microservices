@@ -14,7 +14,7 @@ import { MessageType } from '../../../../models/chat.models';
   templateUrl: './chat-window.component.html'
 })
 export class ChatWindowComponent {
-  facade = inject(ChatFacade);
+  public facade = inject(ChatFacade);
   newMessage = '';
   
   // Expose các Helper và Enum ra template để dùng trong HTML

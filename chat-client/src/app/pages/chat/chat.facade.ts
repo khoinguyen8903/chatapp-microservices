@@ -2,6 +2,9 @@ import { Injectable, signal, computed, inject, effect } from '@angular/core';
 import { Router } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
+import { WebRTCService } from '../../services/webrtc.service';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { Subscription } from 'rxjs';
 import { 
   ChatMessage, 
   ChatRoom, 
@@ -14,6 +17,7 @@ import {
 export class ChatFacade {
   private chatService = inject(ChatService);
   private authService = inject(AuthService);
+  private webRTCService = inject(WebRTCService);
   private router = inject(Router);
 
   // --- STATE (SIGNALS) ---
@@ -33,26 +37,47 @@ export class ChatFacade {
   lastSeen = signal<Date | null>(null);
   isRecipientTyping = signal(false);
   
+  // --- WEBRTC STATE (MỚI) ---
+  callState = this.webRTCService.callState; // Signal gốc từ Service
+  localStream = toSignal(this.webRTCService.localStream$); // Convert Subject -> Signal
+  remoteStream = toSignal(this.webRTCService.remoteStream$);
+  isVideoCall = toSignal(this.webRTCService.isVideoCall$, { initialValue: true }); // [UPDATE] Lấy từ Service
+
   // Cache user để đỡ phải gọi API nhiều lần
   private userCache = new Map<string, string>();
-  private statusSubscription: any;
+  
+  // Quản lý tất cả subscription để cleanup gọn gàng
+  private subscriptions = new Subscription();
+  // Subscription riêng cho status để switch qua lại giữa các user
+  private statusSubscription: Subscription | null = null;
 
   constructor() {
+    // Constructor nên giữ đơn giản. Logic khởi tạo chuyển sang init()
+    // để Component gọi khi khởi tạo view.
+  }
+
+  // Hàm này được gọi từ ChatComponent (ngOnInit)
+  init() {
     const userStr = localStorage.getItem('user');
-    if (userStr) {
-      this.currentUser.set(JSON.parse(userStr));
-      this.chatService.connect(this.currentUser());
-      this.loadRooms();
-      this.setupSocketListeners();
-    } else {
+    if (!userStr) {
       this.router.navigate(['/login']);
+      return;
     }
+
+    this.currentUser.set(JSON.parse(userStr));
+    this.chatService.connect(this.currentUser());
+    this.loadRooms();
+    this.setupSocketListeners();
   }
 
   // --- SOCKET LISTENERS ---
   private setupSocketListeners() {
+    // Hủy các listener cũ nếu có để tránh duplicate khi init lại
+    this.subscriptions.unsubscribe();
+    this.subscriptions = new Subscription();
+
     // 1. Nhận tin nhắn mới
-    this.chatService.onMessage().subscribe((msg) => {
+    const msgSub = this.chatService.onMessage().subscribe((msg) => {
       if (!msg) return;
       const currentSession = this.selectedSession();
       
@@ -79,9 +104,10 @@ export class ChatFacade {
       // Nếu là liên hệ mới hoặc nhóm mới chưa có trong list -> reload sidebar
       this.checkAndReloadSessions(msg);
     });
+    this.subscriptions.add(msgSub);
 
     // 2. Nhận trạng thái Typing
-    this.chatService.onTyping().subscribe((typingMsg) => {
+    const typingSub = this.chatService.onTyping().subscribe((typingMsg) => {
       const currentSession = this.selectedSession();
       if (!currentSession) return;
 
@@ -97,9 +123,10 @@ export class ChatFacade {
          }
       }
     });
+    this.subscriptions.add(typingSub);
 
     // 3. Nhận trạng thái Online/Offline (Chỉ áp dụng cho Chat 1-1)
-    this.chatService.onStatusUpdate().subscribe((update: any) => {
+    const statusSub = this.chatService.onStatusUpdate().subscribe((update: any) => {
         const currentSession = this.selectedSession();
         // Chỉ update nếu đang chat 1-1 và đúng người
         if (currentSession && currentSession.type === 'PRIVATE' && update.userId === currentSession.id) {
@@ -110,6 +137,7 @@ export class ChatFacade {
             }
         }
     });
+    this.subscriptions.add(statusSub);
   }
 
   // --- API CALLS & LOGIC ---
@@ -240,12 +268,37 @@ export class ChatFacade {
     };
 
     const isSent = this.chatService.sendMessage(msg);
-    if (isSent) {
-        // [QUAN TRỌNG] Đã xóa dòng này để tránh lặp tin nhắn
-        // this.messages.update(old => [...old, msg]);
-        return true;
-    }
-    return false;
+    return isSent;
+  }
+
+  // --- WEBRTC ACTIONS (MỚI) ---
+  
+  startVideoCall() {
+    const session = this.selectedSession();
+    if (!session) return;
+
+    const isGroup = session.type === 'GROUP';
+    // [FIX] Gọi hàm chuẩn, không cần ép kiểu any nữa
+    this.webRTCService.startCall(session.id, isGroup, true);
+  }
+
+  startVoiceCall() {
+    const session = this.selectedSession();
+    if (!session) return;
+
+    const isGroup = session.type === 'GROUP';
+    // [FIX] Gọi hàm chuẩn
+    this.webRTCService.startCall(session.id, isGroup, false);
+  }
+
+  answerCall() {
+    this.webRTCService.acceptCall();
+  }
+
+  endCall() {
+    // Nếu đang gọi mà tắt -> Hủy
+    // Nếu đang nghe mà tắt -> Từ chối/Kết thúc
+    this.webRTCService.endCall();
   }
 
   // --- CÁC HÀM CŨ GIỮ NGUYÊN ---
@@ -308,6 +361,10 @@ export class ChatFacade {
   }
 
   cleanup() {
+      // Hủy subscription riêng lẻ
       if (this.statusSubscription) this.statusSubscription.unsubscribe();
+      
+      // Hủy toàn bộ listener socket khi component bị hủy
+      this.subscriptions.unsubscribe();
   }
 }

@@ -2,6 +2,9 @@ package com.chatapp.api_gateway.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+// [QUAN TRỌNG] Nhớ thêm 2 dòng import này
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
@@ -10,18 +13,17 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 public class CorsConfig {
 
     @Bean
+    // [QUAN TRỌNG] Đặt độ ưu tiên cao nhất để chạy trước Security
+    @Order(Ordered.HIGHEST_PRECEDENCE)
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration corsConfig = new CorsConfiguration();
 
-        // --- SỬA Ở ĐÂY ---
-        // Thay vì liệt kê cụ thể, hãy dùng Pattern "*" để chấp nhận MỌI nguồn
-        // Bao gồm cả http://127.0.0.1:5500 hay file://...
+        // Chấp nhận mọi nguồn (cho phép cả IP LAN và localhost)
         corsConfig.addAllowedOriginPattern("*");
 
-        // Các phần dưới giữ nguyên
         corsConfig.setMaxAge(3600L);
-        corsConfig.addAllowedMethod("*"); // Cho phép mọi Method (GET, POST, PUT, DELETE...)
-        corsConfig.addAllowedHeader("*"); // Cho phép mọi Header
+        corsConfig.addAllowedMethod("*"); // GET, POST, PUT, DELETE, OPTIONS...
+        corsConfig.addAllowedHeader("*"); // Authorization, Content-Type...
         corsConfig.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -17,12 +17,14 @@ import { Stomp } from '@stomp/stompjs';
 })
 export class ChatService {
   // Trỏ vào API Gateway (Port 8080)
-  private apiUrl = 'http://localhost:8080'; 
+  private apiUrl = 'http://192.168.1.9:8080'; 
   private stompClient: any;
   
   private messageSubject = new Subject<ChatMessage>();
   private typingSubject = new Subject<TypingMessage>(); 
   private statusSubject = new Subject<UserStatus>();
+  // 1. Thêm Subject để bắn tín hiệu sang WebRTCService
+  private callMessageSubject = new Subject<any>();
 
   constructor(private http: HttpClient) { }
 
@@ -87,6 +89,15 @@ export class ChatService {
         }
       });
 
+      // [MỚI] Subscribe tín hiệu cuộc gọi
+      // Nghe tin riêng 1-1
+      _this.stompClient.subscribe(`/topic/call/${currentUser.id}`, function (msg: any) {
+          if (msg.body) {
+              const payload = JSON.parse(msg.body);
+              _this.callMessageSubject.next(payload);
+          }
+      });
+
       // 2. Báo danh Online
       _this.stompClient.send("/app/user.addUser", {}, currentUser.id);
       
@@ -127,6 +138,14 @@ export class ChatService {
     }
   }
 
+  // 3. Hàm gửi tín hiệu gọi (Signaling)
+  sendCallSignal(payload: any) {
+    if (this.stompClient && this.stompClient.connected) {
+        // payload chính là CallMessage bên Backend
+        this.stompClient.send("/app/call", {}, JSON.stringify(payload));
+    }
+  }
+
   sendTyping(typingMsg: TypingMessage) {
     if (this.stompClient && this.stompClient.connected) {
         this.stompClient.send("/app/typing", {}, JSON.stringify(typingMsg));
@@ -149,6 +168,11 @@ export class ChatService {
 
   onTyping(): Observable<TypingMessage> {
     return this.typingSubject.asObservable();
+  }
+
+  // 4. Hàm để WebRTCService đăng ký lắng nghe
+  onCallMessage(): Observable<any> {
+    return this.callMessageSubject.asObservable();
   }
 
   onStatusUpdate(): Observable<UserStatus> {

@@ -1,0 +1,6 @@
+/* Lật ngược video của mình để giống gương */
+video {
+    &.transform {
+        transform: scaleX(-1);
+    }
+}
