@@ -5,7 +5,8 @@ import {
   ChatRoom, 
   TypingMessage, 
   UserStatus, 
-  MessageType 
+  MessageType,
+  MessageStatus // [MỚI] Nhớ import Enum này
 } from '../models/chat.models'; 
 import { Observable, Subject } from 'rxjs';
 
@@ -16,27 +17,26 @@ import { Stomp } from '@stomp/stompjs';
   providedIn: 'root'
 })
 export class ChatService {
-  // Trỏ vào API Gateway (Port 8080)
   private apiUrl = 'http://192.168.1.9:8080'; 
   private stompClient: any;
   
   private messageSubject = new Subject<ChatMessage>();
   private typingSubject = new Subject<TypingMessage>(); 
   private statusSubject = new Subject<UserStatus>();
-  // 1. Thêm Subject để bắn tín hiệu sang WebRTCService
   private callMessageSubject = new Subject<any>();
+
+  // [MỚI] Subject riêng để xử lý việc cập nhật icon trạng thái (Sent -> Seen)
+  private messageStatusSubject = new Subject<any>();
 
   constructor(private http: HttpClient) { }
 
-  // --- HÀM UPLOAD ẢNH ---
+  // --- API HELPER ---
   uploadImage(file: File): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
     return this.http.post(`${this.apiUrl}/api/v1/media/upload`, formData);
   }
 
-  // --- [MỚI] API TẠO NHÓM ---
-  // Gọi vào Controller: @PostMapping("/rooms/group")
   createGroup(groupName: string, adminId: string, memberIds: string[]): Observable<ChatRoom> {
       const payload = {
           groupName: groupName,
@@ -46,51 +46,69 @@ export class ChatService {
       return this.http.post<ChatRoom>(`${this.apiUrl}/rooms/group`, payload);
   }
 
+  // --- WEBSOCKET CONNECTION ---
   connect(currentUser: any): void {
     if (this.stompClient && this.stompClient.connected) {
       return;
     }
     
     this.stompClient = Stomp.over(() => new SockJS(`${this.apiUrl}/ws`));
-    // this.stompClient.debug = () => {}; // Bỏ comment nếu muốn xem log STOMP
+    // this.stompClient.debug = () => {}; 
 
     const _this = this;
     this.stompClient.connect({}, function (frame: any) {
       console.log('Connected to STOMP: ' + frame);
 
-      // 1. Subscribe nhận tin nhắn (Dùng chung cho cả Private và Group)
-      // Backend đã tự động định tuyến tin nhắn nhóm vào queue riêng của user này
+      // 1. Subscribe nhận tin nhắn & sự kiện Chat
       _this.stompClient.subscribe(`/topic/${currentUser.id}`, function (msg: any) {
         if (msg.body) {
           const payload = JSON.parse(msg.body);
           
+          // --- [LOGIC MỚI QUAN TRỌNG] Phân loại payload ---
+
+          // CASE 1: Thông báo cập nhật trạng thái (Người kia đã xem tin của mình)
+          // Payload: { type: "STATUS_UPDATE", contactId: "...", status: "SEEN" }
+          if (payload.type === 'STATUS_UPDATE') {
+              _this.messageStatusSubject.next(payload);
+              return; // Dừng xử lý, không map thành tin nhắn
+          }
+
+          // CASE 2: Sự kiện đang nhập (Typing)
           if (payload.hasOwnProperty('isTyping') || payload.hasOwnProperty('typing')) {
              const isTypingValue = payload.hasOwnProperty('isTyping') ? payload.isTyping : payload.typing;
              const typingMsg: TypingMessage = {
                  senderId: payload.senderId,
-                 recipientId: payload.recipientId, // Nếu là nhóm, đây là GroupID
+                 recipientId: payload.recipientId,
                  isTyping: isTypingValue
              };
              _this.typingSubject.next(typingMsg);
-          } else {
-             // Mapping tin nhắn nhận được
-             const chatMessage: ChatMessage = {
-                 id: payload.id,
-                 senderId: payload.senderId,
-                 // [LƯU Ý]: Nếu là tin nhóm, Backend trả về recipientId = GroupID
-                 // Frontend sẽ dùng ID này để biết tin nhắn thuộc về nhóm nào
-                 recipientId: payload.recipientId, 
-                 content: payload.content,
-                 timestamp: new Date(),
-                 type: payload.type || MessageType.TEXT 
-             };
-             _this.messageSubject.next(chatMessage);
+             return;
+          } 
+          
+          // CASE 3: Tin nhắn chat thông thường
+          // Mapping tin nhắn nhận được
+          const chatMessage: ChatMessage = {
+              id: payload.id,
+              senderId: payload.senderId,
+              recipientId: payload.recipientId, 
+              content: payload.content,
+              timestamp: new Date(),
+              type: payload.type || MessageType.TEXT,
+              
+              // [MỚI] Map thêm status từ backend gửi về
+              status: payload.status || MessageStatus.SENT 
+          };
+
+          // [MỚI] Tự động báo đã nhận (DELIVERED) nếu tin nhắn đến từ người khác
+          if (payload.senderId !== currentUser.id) {
+              _this.markAsDelivered(payload.senderId, currentUser.id);
           }
+
+          _this.messageSubject.next(chatMessage);
         }
       });
 
-      // [MỚI] Subscribe tín hiệu cuộc gọi
-      // Nghe tin riêng 1-1
+      // 2. Subscribe tín hiệu cuộc gọi
       _this.stompClient.subscribe(`/topic/call/${currentUser.id}`, function (msg: any) {
           if (msg.body) {
               const payload = JSON.parse(msg.body);
@@ -98,7 +116,7 @@ export class ChatService {
           }
       });
 
-      // 2. Báo danh Online
+      // 3. Báo danh Online
       _this.stompClient.send("/app/user.addUser", {}, currentUser.id);
       
     }, function(error: any) {
@@ -106,6 +124,34 @@ export class ChatService {
        setTimeout(() => _this.connect(currentUser), 5000); 
     });
   }
+
+  // --- [MỚI] HÀM BÁO ĐÃ XEM ---
+  // Gọi hàm này khi người dùng click vào đoạn chat
+  markAsRead(senderId: string, recipientId: string) {
+    if (this.stompClient && this.stompClient.connected) {
+        const payload = {
+            senderId: senderId,    // Người gửi tin nhắn gốc (Người kia)
+            recipientId: recipientId, // Người đang đọc (Là mình)
+            status: 'SEEN'
+        };
+        // Gửi lên endpoint @MessageMapping("/status") ở Backend
+        this.stompClient.send('/app/status', {}, JSON.stringify(payload));
+    }
+  }
+
+  // [MỚI] Hàm báo đã nhận (Delivered) - Gọi tự động khi Socket nhận tin
+  markAsDelivered(senderId: string, recipientId: string) {
+    if (this.stompClient && this.stompClient.connected) {
+        const payload = {
+            senderId: senderId,
+            recipientId: recipientId,
+            status: 'DELIVERED'
+        };
+        this.stompClient.send('/app/status', {}, JSON.stringify(payload));
+    }
+  }
+
+  // --- CÁC HÀM CŨ GIỮ NGUYÊN ---
 
   subscribeToStatus(partnerId: string) {
     if (this.stompClient && this.stompClient.connected) {
@@ -126,7 +172,6 @@ export class ChatService {
   sendMessage(msg: ChatMessage): boolean {
     if (this.stompClient && this.stompClient.connected) {
         try {
-            // Backend tự phân biệt User hay Group dựa vào recipientId
             this.stompClient.send("/app/chat", {}, JSON.stringify(msg));
             return true;
         } catch (e) {
@@ -138,10 +183,8 @@ export class ChatService {
     }
   }
 
-  // 3. Hàm gửi tín hiệu gọi (Signaling)
   sendCallSignal(payload: any) {
     if (this.stompClient && this.stompClient.connected) {
-        // payload chính là CallMessage bên Backend
         this.stompClient.send("/app/call", {}, JSON.stringify(payload));
     }
   }
@@ -153,14 +196,14 @@ export class ChatService {
   }
 
   getChatMessages(senderId: string, recipientId: string): Observable<ChatMessage[]> {
-    // Nếu là Chat nhóm: recipientId chính là GroupID
-    // Backend service đã handle việc tìm tin nhắn theo GroupID
     return this.http.get<ChatMessage[]>(`${this.apiUrl}/messages/${senderId}/${recipientId}`);
   }
 
   getChatRooms(userId: string): Observable<ChatRoom[]> {
     return this.http.get<ChatRoom[]>(`${this.apiUrl}/rooms/${userId}`);
   }
+
+  // --- OBSERVABLES ---
 
   onMessage(): Observable<ChatMessage> {
     return this.messageSubject.asObservable();
@@ -170,12 +213,16 @@ export class ChatService {
     return this.typingSubject.asObservable();
   }
 
-  // 4. Hàm để WebRTCService đăng ký lắng nghe
   onCallMessage(): Observable<any> {
     return this.callMessageSubject.asObservable();
   }
 
   onStatusUpdate(): Observable<UserStatus> {
       return this.statusSubject.asObservable();
+  }
+
+  // [MỚI] Observable để Component lắng nghe sự kiện đổi icon status
+  onMessageStatusChange(): Observable<any> {
+      return this.messageStatusSubject.asObservable();
   }
 }

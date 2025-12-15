@@ -7,6 +7,11 @@ export enum MessageType {
   VIDEO = 'VIDEO',
   FILE = 'FILE'
 }
+export enum MessageStatus {
+  SENT = 'SENT',
+  DELIVERED = 'DELIVERED',
+  SEEN = 'SEEN'
+}
 
 // 2. Interface Tin nhắn (Khớp với Java Backend)
 export interface ChatMessage {
@@ -18,7 +23,7 @@ export interface ChatMessage {
   timestamp?: Date;
   type?: MessageType;
   fileName?: string;    // Tên file (nếu có)
-
+  status?: MessageStatus;
   senderName?: string;  
 }
 

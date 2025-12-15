@@ -10,7 +10,8 @@ import {
   ChatRoom, 
   TypingMessage, 
   MessageType, 
-  ChatSession 
+  ChatSession,
+  MessageStatus 
 } from '../../models/chat.models';
 
 @Injectable({ providedIn: 'root' })
@@ -99,6 +100,11 @@ export class ChatFacade {
       if (isBelongToCurrentSession) {
         this.messages.update(old => [...old, msg]);
         this.isRecipientTyping.set(false);
+
+        // [MỚI] Nếu là tin nhắn đến (không phải mình gửi) và đang mở chat 1-1 -> Đánh dấu đã xem ngay
+        if (msg.senderId !== this.currentUser().id && currentSession?.type === 'PRIVATE') {
+            this.chatService.markAsRead(msg.senderId, this.currentUser().id);
+        }
       }
       
       // Nếu là liên hệ mới hoặc nhóm mới chưa có trong list -> reload sidebar
@@ -138,6 +144,27 @@ export class ChatFacade {
         }
     });
     this.subscriptions.add(statusSub);
+
+    // 4. [MỚI] Nhận cập nhật trạng thái tin nhắn (Sent -> Seen)
+    const messageStatusSub = this.chatService.onMessageStatusChange().subscribe((payload: any) => {
+        // Payload: { contactId: "...", status: "SEEN" }
+        const currentSession = this.selectedSession();
+        
+        // Nếu người vừa xem tin nhắn (contactId) chính là người mình đang chat
+        if (currentSession && currentSession.id === payload.contactId) {
+            this.messages.update(msgs => msgs.map(msg => {
+                // Cập nhật status cho các tin nhắn do MÌNH gửi đi
+                if (msg.senderId === this.currentUser().id) {
+                    // [FIX] Nếu tin nhắn đã SEEN thì giữ nguyên, không revert về DELIVERED
+                    if (msg.status === MessageStatus.SEEN) return msg;
+                    
+                    return { ...msg, status: payload.status };
+                }
+                return msg;
+            }));
+        }
+    });
+    this.subscriptions.add(messageStatusSub);
   }
 
   // --- API CALLS & LOGIC ---
@@ -219,6 +246,9 @@ export class ChatFacade {
     if (session.type === 'PRIVATE') {
         // --- LOGIC CŨ: Load Online Status ---
         this.loadUserStatus(session.id);
+        
+        // [MỚI] Khi bấm vào chat 1-1, báo cho server biết mình đã đọc tin nhắn của họ
+        this.chatService.markAsRead(session.id, this.currentUser().id);
     } else {
         // --- LOGIC MỚI: Group không cần check online ---
         this.partnerStatus.set('ONLINE');

@@ -5,7 +5,7 @@ import { ChatFacade } from '../../chat.facade';
 import { LastSeenPipe } from '../../pipes/last-seen.pipe';
 import { FileHelper } from '../../utils/file.helper';
 // [QUAN TRỌNG] Đảm bảo đường dẫn import đúng tới file models
-import { MessageType } from '../../../../models/chat.models'; 
+import { MessageType, MessageStatus } from '../../../../models/chat.models'; 
 
 @Component({
   selector: 'app-chat-window',
@@ -20,6 +20,7 @@ export class ChatWindowComponent {
   // Expose các Helper và Enum ra template để dùng trong HTML
   FileHelper = FileHelper;
   MessageType = MessageType;
+  MessageStatus = MessageStatus;
 
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef;
 

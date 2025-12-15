@@ -151,7 +151,13 @@
               <span class="text-[11px] mt-1.5 px-2 font-semibold text-slate-400 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
                   {{ msg.timestamp | date:'HH:mm' }}
                   @if(msg.senderId === facade.currentUser().id) {
-                      <i class="fas fa-check-double ml-1 text-indigo-400 text-[10px]"></i>
+                      @if (msg.status === MessageStatus.SEEN) {
+                          <i class="fas fa-check-circle ml-1 text-indigo-500 text-[10px]" title="Đã xem"></i>
+                      } @else if (msg.status === MessageStatus.DELIVERED) {
+                          <i class="fas fa-check-circle ml-1 text-slate-400 text-[10px]" title="Đã nhận"></i>
+                      } @else {
+                          <i class="far fa-check-circle ml-1 text-slate-300 text-[10px]" title="Đã gửi"></i>
+                      }
                   }
               </span>
           </div>

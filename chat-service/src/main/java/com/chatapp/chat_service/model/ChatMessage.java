@@ -1,6 +1,7 @@
 package com.chatapp.chat_service.model;
 
-import com.chatapp.chat_service.enums.MessageType; // Import Enum vừa tạo
+import com.chatapp.chat_service.enums.MessageType;
+import com.chatapp.chat_service.enums.MessageStatus; // Import Enum mới
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,12 +22,14 @@ public class ChatMessage {
     private String chatId;
     private String senderId;
     private String recipientId;
-    private String content; // Nếu type=IMAGE thì content là URL ảnh
+    private String content;
 
     private Date timestamp;
 
-    // --- [THÊM MỚI] ---
-    // Mặc định nếu không gửi gì thì là TEXT
     @Builder.Default
     private MessageType type = MessageType.TEXT;
+
+    // --- [THÊM MỚI TRẠNG THÁI] ---
+    @Builder.Default
+    private MessageStatus status = MessageStatus.SENT;
 }
