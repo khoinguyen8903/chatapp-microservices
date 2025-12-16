@@ -42,4 +42,5 @@ Thumbs.db
 
 # Environment variables (Giấu khóa bí mật nếu dùng file .env)
 .env
-git rm --cached notification-service/src/main/resources/firebase-service-account.json
+# Firebase Service Account (KHÔNG ĐƯỢC PHÉP ĐẨY LÊN GITHUB)
+notification-service/src/main/resources/firebase-service-account.json
