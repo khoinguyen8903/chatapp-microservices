@@ -1,0 +1,8 @@
+spring:
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+app:
+  firebase-config: classpath:firebase-service-account.json

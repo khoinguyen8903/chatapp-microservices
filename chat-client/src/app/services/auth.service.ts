@@ -27,7 +27,6 @@ export interface RegisterRequest {
   providedIn: 'root'
 })
 export class AuthService {
-  // Lưu ý: Đảm bảo environment.apiUrl là 'http://192.168.1.9:8080' (hoặc cổng gateway của bạn)
   private apiUrl = `${environment.apiUrl}/api/auth`;
 
   constructor(private http: HttpClient) { }
@@ -37,16 +36,14 @@ export class AuthService {
     return this.http.post<AuthResponse>(`${this.apiUrl}/login`, request).pipe(
       tap({
         next: (response) => {
-          alert('Login OK!'); // Nếu thành công thì báo OK
+          // alert('Login OK!'); // Có thể comment lại cho đỡ phiền khi chạy thật
           if (response && response.token) {
             this.saveSession(response);
           }
         },
         error: (err) => {
-          // [QUAN TRỌNG] In chi tiết lỗi ra màn hình điện thoại
-          alert(`LỖI: ${err.status} - ${err.statusText}`);
-          alert(`URL gọi: ${err.url}`);
-          alert(`Message: ${err.message}`);
+          console.error('Login Failed', err);
+          // alert(`LỖI: ${err.status} - ${err.message}`);
         }
       })
     );
@@ -60,8 +57,10 @@ export class AuthService {
   // 3. Quản lý Session
   private saveSession(data: AuthResponse) {
     localStorage.setItem('token', data.token);
+    
+    // Lưu thông tin User vào localStorage để dùng lại sau này
     localStorage.setItem('user', JSON.stringify({
-      id: data.userId,
+      id: data.userId,       // [QUAN TRỌNG] Đây là ID thật
       username: data.username,
       name: data.displayName
     }));
@@ -71,17 +70,39 @@ export class AuthService {
     return localStorage.getItem('token');
   }
 
-  logout() {
-    localStorage.clear();
+  // --- [MỚI] Hàm lấy User ID thật từ bộ nhớ ---
+  getUserId(): string | null {
+    const userJson = localStorage.getItem('user');
+    if (userJson) {
+      try {
+        const user = JSON.parse(userJson);
+        return user.id; // Trả về ID thật (Ví dụ: "93ebd290-...")
+      } catch (e) {
+        console.error('Lỗi khi đọc thông tin User từ LocalStorage', e);
+        return null;
+      }
+    }
+    return null;
   }
 
-  // 4. Kiểm tra user tồn tại (Dùng khi tìm kiếm username để tạo chat)
+  // --- [MỚI] Hàm lấy toàn bộ thông tin User (Tên, Username...) ---
+  getCurrentUser(): any {
+    const userJson = localStorage.getItem('user');
+    return userJson ? JSON.parse(userJson) : null;
+  }
+
+  logout() {
+    localStorage.clear();
+    // Nên reload lại trang hoặc chuyển về trang login để xóa sạch state
+    window.location.href = '/login'; 
+  }
+
+  // 4. Kiểm tra user tồn tại
   checkUserExists(username: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/check/${username}`);
   }
 
-  // 5. --- MỚI THÊM: Lấy thông tin user theo ID ---
-  // Hàm này được ChatComponent gọi để hiển thị tên đẹp thay vì UUID trong danh sách chat
+  // 5. Lấy thông tin user theo ID
   getUserById(userId: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/users/${userId}`);
   }

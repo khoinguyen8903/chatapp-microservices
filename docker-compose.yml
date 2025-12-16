@@ -121,6 +121,7 @@ services:
     environment:
       SERVER_PORT: 8082
       SPRING_DATA_MONGODB_URI: mongodb://chat-mongo:27017/chatdb
+      NOTIFICATION_SERVICE_URL: http://notification-service:8080
 
   # --- CHAT DATABASE (MongoDB) ---
   chat-mongo:
@@ -143,6 +144,30 @@ services:
       - app-network
     depends_on:
       - api-gateway
+  redis:
+    image: redis:alpine
+    container_name: chat-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network 
+  notification-service:
+    build: ./notification-service  # Tên thư mục chứa code của bạn
+    container_name: notification-service
+    ports:
+      - "8084:8080" # Máy ngoài 8084 -> Docker 8080
+    networks:
+      - app-network
+    depends_on:
+      - redis # Phải đợi Redis chạy xong mới chạy cái này
+    environment:
+      SERVER_PORT: 8080
+      # Cấu hình Redis (trỏ vào service 'redis' trong file này)
+      SPRING_DATA_REDIS_HOST: redis 
+      SPRING_DATA_REDIS_PORT: 6379
+      # Firebase Config
+      # Đảm bảo file serviceAccountKey.json đã được copy vào khi build Docker
+      APP_FIREBASE_CONFIG: classpath:firebase-service-account.json
 
 # --- NETWORKS & VOLUMES ---
 networks:

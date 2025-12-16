@@ -54,6 +54,10 @@ spring:
           filters:
             - AuthenticationFilter # Yêu cầu đăng nhập mới được upload
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+        - id: notification-service
+          uri: http://notification-service:8080
+          predicates:
+            - Path=/api/notifications/**
 
 jwt:
   secret: "mysecretkey123456789012345678901234"

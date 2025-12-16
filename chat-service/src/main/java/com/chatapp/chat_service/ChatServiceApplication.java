@@ -5,8 +5,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 // Thêm 2 dòng import này
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.reactive.ReactiveSecurityAutoConfiguration;
-
-// SỬA DÒNG NÀY (Thêm exclude):
+import org.springframework.cloud.openfeign.EnableFeignClients;
+@EnableFeignClients
 @SpringBootApplication(exclude = {
 		SecurityAutoConfiguration.class,
 		ReactiveSecurityAutoConfiguration.class

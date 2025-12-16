@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -11,7 +11,7 @@ import { AuthService } from '../../services/auth.service';
   templateUrl: './login.html',
   styleUrls: ['./login.scss']
 })
-export class Login {
+export class Login implements OnInit { // [MỚI] Implement OnInit
   isLoginMode = signal(true);
   isLoading = signal(false);
   showPassword = signal(false);
@@ -41,6 +41,13 @@ export class Login {
     });
   }
 
+  // [MỚI] Kiểm tra nếu đã đăng nhập thì đá sang Chat luôn
+  ngOnInit() {
+    if (this.authService.getToken()) {
+      this.router.navigate(['/chat']);
+    }
+  }
+
   get f() { return this.authForm.controls; }
 
   toggleMode() {
@@ -66,14 +73,16 @@ export class Login {
     // --- LOGIC LOGIN ---
     if (this.isLoginMode()) {
       this.isLoading.set(true);
+      // Gọi AuthService.login -> Service này sẽ tự lưu Token và User Info vào LocalStorage
       this.authService.login({ username: val.username, password: val.password }).subscribe({
         next: (res) => {
           this.isLoading.set(false);
+          // Sau khi login thành công, chuyển hướng sang trang Chat
+          // Lúc này ChatComponent sẽ lấy được User ID thật từ LocalStorage
           this.router.navigate(['/chat']); 
         },
         error: (err) => {
           this.isLoading.set(false);
-          // Dịch lỗi login sang tiếng Việt luôn nếu cần
           if (err.status === 401 || err.status === 400) {
              this.globalError.set('Sai tài khoản hoặc mật khẩu.');
           } else {
@@ -107,16 +116,15 @@ export class Login {
           if (err.status === 400 && err.error) {
             const serverErrors = err.error;
             
-            // 1. Xử lý lỗi chung (như "Username already exists")
+            // Xử lý lỗi chung
             if (serverErrors.error) {
-                // --- SỬA Ở ĐÂY: Dịch thông báo lỗi sang Tiếng Việt ---
                 if (serverErrors.error === 'Username already exists') {
                     this.globalError.set('Tài khoản đã tồn tại');
                 } else {
                     this.globalError.set(serverErrors.error);
                 }
             } 
-            // 2. Xử lý lỗi validation từng trường
+            // Xử lý lỗi validation từng trường
             else {
                 Object.keys(serverErrors).forEach(key => {
                   const control = this.authForm.get(key);
