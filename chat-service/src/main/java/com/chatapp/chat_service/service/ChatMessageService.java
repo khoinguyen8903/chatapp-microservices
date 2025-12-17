@@ -1,10 +1,13 @@
 package com.chatapp.chat_service.service;
 
 import com.chatapp.chat_service.client.NotificationClient;
-import com.chatapp.chat_service.dto.NotificationRequest; // Nhớ import đúng DTO
+import com.chatapp.chat_service.client.UserClient; // [QUAN TRỌNG] Dùng Client
+import com.chatapp.chat_service.dto.NotificationRequest;
+import com.chatapp.chat_service.dto.UserDTO; // [QUAN TRỌNG] Dùng DTO
 import com.chatapp.chat_service.enums.MessageStatus;
+import com.chatapp.chat_service.enums.MessageType;
 import com.chatapp.chat_service.model.ChatMessage;
-import com.chatapp.chat_service.model.ChatRoom; // Import ChatRoom
+import com.chatapp.chat_service.model.ChatRoom;
 import com.chatapp.chat_service.repository.ChatMessageRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -22,61 +25,90 @@ public class ChatMessageService {
     @Autowired private ChatRoomService chatRoomService;
     @Autowired private NotificationClient notificationClient;
 
+    // [SỬA] Inject UserClient thay vì UserRepository
+    @Autowired private UserClient userClient;
+
     public ChatMessage save(ChatMessage chatMessage) {
-        // 1. Xử lý logic Chat ID (Giữ nguyên)
+        // 1. Logic tạo Chat ID nếu chưa có
         if (chatMessage.getChatId() == null || chatMessage.getChatId().isEmpty()) {
-            // Trường hợp này thường chỉ xảy ra ở chat 1-1 lần đầu
             var chatId = chatRoomService
                     .getChatRoomId(chatMessage.getSenderId(), chatMessage.getRecipientId(), true)
                     .orElseThrow();
             chatMessage.setChatId(chatId);
         }
 
-        // 2. Lưu tin nhắn vào DB
+        // 2. Lưu tin nhắn
         repository.save(chatMessage);
 
-        // 3. Xử lý Thông Báo (Async)
+        // 3. Gửi thông báo bất đồng bộ (Async)
         CompletableFuture.runAsync(() -> {
             try {
                 handleNotification(chatMessage);
             } catch (Exception e) {
                 System.err.println(">> Lỗi gửi thông báo: " + e.getMessage());
+                e.printStackTrace();
             }
         });
 
         return chatMessage;
     }
 
-    // --- [HÀM MỚI] Tách logic thông báo ra riêng để xử lý Nhóm/Lẻ ---
     private void handleNotification(ChatMessage message) {
-        // Kiểm tra xem recipientId có phải là một ID của Phòng Chat Nhóm không
-        // (Trong logic Chat Nhóm, Frontend thường gửi recipientId = GroupId)
+        // A. [FIX TÊN] Lấy USERNAME từ Auth Service
+        String senderName = "Người lạ";
+        try {
+            // Gọi sang Auth Service
+            UserDTO userDto = userClient.getUserById(message.getSenderId());
+
+            // [SỬA LẠI THEO YÊU CẦU] Lấy username thay vì fullName
+            if (userDto != null && userDto.getUsername() != null) {
+                senderName = userDto.getUsername();
+            }
+        } catch (Exception e) {
+            System.out.println("Không lấy được username user: " + message.getSenderId());
+        }
+
+        // B. [FIX URL] Xử lý nội dung thông báo gọn gàng
+        String notificationBody = "Bạn có tin nhắn mới";
+        MessageType type = message.getType();
+
+        if (type == MessageType.TEXT) {
+            notificationBody = message.getContent();
+            if (notificationBody != null && notificationBody.length() > 50) {
+                notificationBody = notificationBody.substring(0, 47) + "...";
+            }
+        } else if (type == MessageType.IMAGE) {
+            notificationBody = "📷 Đã gửi một ảnh";
+        } else if (type == MessageType.VIDEO) {
+            notificationBody = "🎥 Đã gửi một video";
+        } else if (type == MessageType.FILE) {
+            notificationBody = "📎 Đã gửi một tập tin";
+        }
+
+        // C. Gửi thông báo
         Optional<ChatRoom> chatRoomOpt = chatRoomService.findByChatId(message.getRecipientId());
 
         if (chatRoomOpt.isPresent() && chatRoomOpt.get().isGroup()) {
-            // === TRƯỜNG HỢP 1: CHAT NHÓM ===
+            // Chat Nhóm
             ChatRoom group = chatRoomOpt.get();
-            List<String> members = group.getMemberIds();
-
-            // Duyệt qua từng thành viên để gửi thông báo
-            for (String memberId : members) {
-                // Đừng gửi cho chính người viết tin nhắn
+            for (String memberId : group.getMemberIds()) {
                 if (!memberId.equals(message.getSenderId())) {
                     NotificationRequest notiReq = new NotificationRequest(
-                            memberId, // Gửi cho từng thành viên
-                            "Tin nhắn từ nhóm: " + group.getGroupName(), // Tiêu đề là tên nhóm
-                            message.getSenderId() + ": " + message.getContent() // Nội dung: "Hùng: Alo mọi người"
+                            memberId,
+                            senderName, // Username người gửi
+                            notificationBody,
+                            message.getChatId()
                     );
                     notificationClient.sendNotification(notiReq);
                 }
             }
         } else {
-            // === TRƯỜNG HỢP 2: CHAT 1-1 ===
-            // Với chat 1-1, recipientId chính là User ID người nhận
+            // Chat 1-1
             NotificationRequest notiReq = new NotificationRequest(
                     message.getRecipientId(),
-                    "Tin nhắn mới từ " + message.getSenderId(),
-                    message.getContent()
+                    senderName, // Username người gửi
+                    notificationBody,
+                    message.getChatId()
             );
             notificationClient.sendNotification(notiReq);
         }
@@ -95,8 +127,7 @@ public class ChatMessageService {
     }
 
     public ChatMessage findById(String id) {
-        return repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy tin nhắn với ID: " + id));
+        return repository.findById(id).orElseThrow(() -> new RuntimeException("Not found"));
     }
 
     public void updateStatus(String id, MessageStatus status) {
@@ -117,9 +148,7 @@ public class ChatMessageService {
                 .peek(msg -> msg.setStatus(status))
                 .collect(Collectors.toList());
 
-        if (!messagesToUpdate.isEmpty()) {
-            repository.saveAll(messagesToUpdate);
-        }
+        if (!messagesToUpdate.isEmpty()) repository.saveAll(messagesToUpdate);
         return messagesToUpdate;
     }
 }

@@ -196,11 +196,11 @@ export class ChatFacade {
         // TRƯỜNG HỢP 2: LÀ PRIVATE (Chat 1-1)
         else {
             const partnerId = this.getPartnerId(room);
-            let displayName = 'Loading...';
+            let fullName = 'Loading...';
             
             // Check cache xem có tên chưa
             if (this.userCache.has(partnerId)) {
-                displayName = this.userCache.get(partnerId)!;
+                fullName = this.userCache.get(partnerId)!;
             } else {
                 // Nếu chưa có, gọi API lấy tên (Lazy Load)
                 this.fetchUserName(partnerId);
@@ -208,7 +208,7 @@ export class ChatFacade {
 
             return {
                 id: partnerId,
-                name: displayName,
+                name: fullName,
                 avatar: undefined, 
                 type: 'PRIVATE',
                 status: 'OFFLINE'

@@ -47,7 +47,7 @@ public class JwtService {
         return Jwts.builder()
                 .setSubject(user.getId())
                 .claim("username", user.getUsername())
-                .claim("displayName", user.getDisplayName())
+                .claim("fullName", user.getFullName())
                 .setIssuedAt(now)
                 .setExpiration(exp)
                 .signWith(key, SignatureAlgorithm.HS256)

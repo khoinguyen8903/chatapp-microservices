@@ -28,14 +28,12 @@ public class SecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        // SỬA DÒNG NÀY: Khớp với @RequestMapping("/api/auth") bên Controller
-                        .requestMatchers("/auth/**", "/api/auth/**").permitAll()
+                        // [QUAN TRỌNG] Thêm "/api/users/**" vào đây để Chat Service gọi được
+                        .requestMatchers("/api/auth/**", "/api/users/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
                 .authenticationProvider(authenticationProvider)
-
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

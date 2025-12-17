@@ -11,8 +11,6 @@ spring:
   cloud:
     compatibility-verifier:
       enabled: false
-# --- SỬA ĐOẠN NÀY ---
-# Đưa ra ngoài cùng, không nằm thụt vào trong 'spring'
 application:
   config:
     # Biến này sẽ hứng giá trị từ Docker (NOTIFICATION_SERVICE_URL)

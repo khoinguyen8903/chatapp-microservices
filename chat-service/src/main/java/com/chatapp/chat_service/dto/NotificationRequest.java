@@ -8,9 +8,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class NotificationRequest {
-    private String userId; // Gửi ID người nhận, bên kia sẽ tự tra Redis ra Token
-    private String title;
-    private String body;
-
-    // Constructor, Getter, Setter, AllArgsConstructor...
+    private String userId;      // ID người nhận
+    private String senderName;  // [ĐỔI TÊN] Thay vì 'title', dùng 'senderName' cho rõ nghĩa
+    private String body;        // Nội dung tin nhắn (đã xử lý rút gọn hoặc thay thế icon)
+    private String roomId;      // [THÊM MỚI] ID phòng chat để xử lý logic Frontend
 }

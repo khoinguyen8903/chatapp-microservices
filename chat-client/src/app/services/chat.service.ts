@@ -17,7 +17,7 @@ import { Stomp } from '@stomp/stompjs';
   providedIn: 'root'
 })
 export class ChatService {
-  private apiUrl = 'http://192.168.1.9:8080'; 
+  private apiUrl = 'http://192.168.1.8:8080'; 
   private stompClient: any;
   
   private messageSubject = new Subject<ChatMessage>();

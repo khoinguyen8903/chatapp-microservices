@@ -26,13 +26,14 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private String password;
 
-    private String displayName;
+    // [SỬA Ở ĐÂY] Đổi displayName -> fullName
+    private String fullName;
 
     // --- Các phương thức bắt buộc của UserDetails ---
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return Collections.emptyList(); // Trả về danh sách quyền rỗng
+        return Collections.emptyList();
     }
 
     @Override

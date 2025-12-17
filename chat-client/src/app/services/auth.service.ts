@@ -7,7 +7,7 @@ import { environment } from '../../environments/environment';
 export interface AuthResponse {
   token: string;
   userId: string;
-  displayName: string;
+  fullName: string;
   username: string;
 }
 
@@ -19,7 +19,7 @@ export interface LoginRequest {
 export interface RegisterRequest {
   username: string;
   password: string;
-  displayName: string;
+  fullName: string;
   email: string;
 }
 
@@ -62,7 +62,7 @@ export class AuthService {
     localStorage.setItem('user', JSON.stringify({
       id: data.userId,       // [QUAN TRỌNG] Đây là ID thật
       username: data.username,
-      name: data.displayName
+      name: data.fullName
     }));
   }
 

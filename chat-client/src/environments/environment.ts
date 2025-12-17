@@ -1,6 +1,6 @@
 export const environment = {
   production: false,
-  apiUrl: 'http://192.168.1.9:8080',
+  apiUrl: 'http://192.168.1.8:8080',
   firebase: {
     apiKey: "AIzaSyB19z3A6pmOYL1eCisMcjCBGOjRNCYAy-0",
     authDomain: "chat-app-25e3f.firebaseapp.com",

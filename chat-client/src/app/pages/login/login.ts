@@ -36,7 +36,7 @@ export class Login implements OnInit { // [MỚI] Implement OnInit
         Validators.minLength(6)
       ]],
       confirmPassword: [''],
-      displayName: ['', [Validators.maxLength(50)]],
+      fullName: ['', [Validators.maxLength(50)]],
       email: ['', [Validators.email]]
     });
   }
@@ -102,7 +102,7 @@ export class Login implements OnInit { // [MỚI] Implement OnInit
       this.authService.register({
         username: val.username,
         password: val.password,
-        displayName: val.displayName || val.username,
+        fullName: val.fullName || val.username,
         email: val.email
       }).subscribe({
         next: () => {

@@ -34,7 +34,7 @@ public class AuthService {
         User user = User.builder()
                 .username(req.getUsername())
                 .password(passwordEncoder.encode(req.getPassword()))
-                .displayName(req.getDisplayName() == null ? req.getUsername() : req.getDisplayName())
+                .fullName(req.getDisplayName() == null ? req.getUsername() : req.getDisplayName())
                 .build();
         userRepository.save(user);
         return user.getId();
@@ -49,7 +49,7 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(user);
-        return new LoginResponse(token, user.getId(), user.getDisplayName());
+        return new LoginResponse(token, user.getId(), user.getFullName());
     }
 
     // Hàm kiểm tra tồn tại (Trả về true/false)

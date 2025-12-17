@@ -23,10 +23,10 @@
             <label>Họ và Tên</label>
             <div class="input-wrapper">
               <span class="icon"><i class="fas fa-id-card"></i></span>
-              <input type="text" formControlName="displayName" placeholder="Ví dụ: Nguyễn Văn A" class="input-field"
-                [class.border-red-500]="f['displayName'].invalid && f['displayName'].touched">
+              <input type="text" formControlName="fullName" placeholder="Ví dụ: Nguyễn Văn A" class="input-field"
+                [class.border-red-500]="f['fullName'].invalid && f['fullName'].touched">
             </div>
-            @if (f['displayName'].hasError('max') && f['displayName'].touched) {
+            @if (f['fullName'].hasError('max') && f['fullName'].touched) {
               <small class="text-red-500 text-xs ml-1">Tên quá dài (max 50 ký tự)</small>
             }
           </div>

@@ -17,16 +17,15 @@ public class TestController {
     @Autowired
     private ChatMessageService chatMessageService;
 
-    // API này giả lập UserA nhắn cho UserB
+    //  giả lập UserA nhắn cho UserB
     @PostMapping("/trigger")
     public String triggerChat() {
         ChatMessage msg = new ChatMessage();
         msg.setSenderId("UserA");
-        msg.setRecipientId("UserB"); // [QUAN TRỌNG] Phải khớp với userId bạn vừa lưu token
+        msg.setRecipientId("UserB");
         msg.setContent("Alo, đây là tin nhắn test từ Backend!");
         msg.setTimestamp(new Date());
 
-        // Gọi hàm này để lưu DB -> nó sẽ tự động gọi Async sang Notification Service
         chatMessageService.save(msg);
 
         return "Đã giả lập gửi tin nhắn thành công!";
