@@ -32,8 +32,14 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: 123456
       SERVER_PORT: 8081
+      APP_VERIFICATION_URL: https://api.chatify.asia/api/auth/verify
+      APP_FRONTEND_URL: https://chatify.asia
       JWT_SECRET: "mysecretkey123456789012345678901234"
       JWT_EXPIRATION_MS: 86400000
+      # Email Configuration (Update with your Gmail credentials)
+      MAIL_USERNAME: nguyenlepdp0809@gmail.com
+      MAIL_PASSWORD: gwqc utct kimh bnin
+      APP_BASE_URL: https://api.chatify.asia
 
   # --- AUTH DATABASE ---
   postgres-db:

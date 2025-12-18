@@ -1,5 +1,6 @@
 package com.chatapp.auth_service.dto;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -20,4 +21,8 @@ public class RegisterRequest {
 
     @Size(max = 50, message = "Tên hiển thị không được quá 50 ký tự")
     private String displayName;
+
+    @NotBlank(message = "Email không được để trống")
+    @Email(message = "Email không hợp lệ")
+    private String email;
 }

@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ChatFacade } from '../../chat.facade';
 import { ChatSession } from '../../../../models/chat.models'; // Kiểm tra lại đường dẫn import này cho đúng project của bạn
 import { CreateGroupModalComponent } from '../create-group-modal/create-group-modal.component';
@@ -14,6 +15,7 @@ import { CreateGroupModalComponent } from '../create-group-modal/create-group-mo
 })
 export class ChatSidebarComponent {
   facade = inject(ChatFacade);
+  router = inject(Router);
   userToChat = '';
 
   // [MỚI] Biến signal để điều khiển việc hiển thị Modal
@@ -45,5 +47,10 @@ export class ChatSidebarComponent {
   // [ĐÃ SỬA] Thay vì dùng prompt, giờ ta bật Modal lên
   openCreateGroupModal() {
     this.showCreateGroupModal.set(true);
+  }
+
+  // Navigate to profile page
+  goToProfile() {
+    this.router.navigate(['/profile']);
   }
 }

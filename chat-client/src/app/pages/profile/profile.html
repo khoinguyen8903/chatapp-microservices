@@ -1,0 +1,150 @@
+<div class="profile-container">
+  <!-- Header -->
+  <div class="profile-header">
+    <button class="back-button" (click)="goBack()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+    </button>
+    <h1>Profile Settings</h1>
+    <button class="logout-button" (click)="logout()">Logout</button>
+  </div>
+
+  <!-- Messages -->
+  <div class="messages">
+    <div *ngIf="errorMessage" class="alert alert-error">{{ errorMessage }}</div>
+    <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
+  </div>
+
+  <!-- Profile Content -->
+  <div class="profile-content" *ngIf="profile">
+    <!-- Avatar Section -->
+    <div class="avatar-section">
+      <div class="avatar-wrapper">
+        <img *ngIf="profile.avatarUrl" [src]="getAvatarUrl()" alt="Avatar" class="avatar-image" />
+        <div *ngIf="!profile.avatarUrl" class="avatar-placeholder">
+          {{ getInitials() }}
+        </div>
+        <div class="avatar-overlay" (click)="avatarInput.click()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          <span>{{ isUploadingAvatar ? 'Uploading...' : 'Change' }}</span>
+        </div>
+      </div>
+      <input 
+        type="file" 
+        #avatarInput 
+        accept="image/*" 
+        (change)="onAvatarFileSelected($event)"
+        style="display: none;"
+      />
+    </div>
+
+    <!-- Profile Info -->
+    <div class="profile-info">
+      <!-- Username (Read-only) -->
+      <div class="form-group">
+        <label>Username</label>
+        <input 
+          type="text" 
+          [value]="profile.username" 
+          readonly 
+          class="form-control readonly"
+        />
+        <small class="form-text">Username cannot be changed</small>
+      </div>
+
+      <!-- Email (Read-only) -->
+      <div class="form-group">
+        <label>Email</label>
+        <div class="email-field">
+          <input 
+            type="email" 
+            [value]="profile.email" 
+            readonly 
+            class="form-control readonly"
+          />
+          <span *ngIf="profile.isActive" class="verified-badge">✓ Verified</span>
+        </div>
+        <small class="form-text">Email cannot be changed</small>
+      </div>
+
+      <!-- Full Name (Editable) -->
+      <div class="form-group">
+        <label>Display Name</label>
+        <input 
+          type="text" 
+          [(ngModel)]="editForm.fullName" 
+          [readonly]="!isEditing"
+          [class.readonly]="!isEditing"
+          class="form-control"
+          placeholder="Enter your display name"
+        />
+      </div>
+
+      <!-- Phone (Editable) -->
+      <div class="form-group">
+        <label>Phone Number</label>
+        <input 
+          type="tel" 
+          [(ngModel)]="editForm.phone" 
+          [readonly]="!isEditing"
+          [class.readonly]="!isEditing"
+          class="form-control"
+          placeholder="Enter your phone number"
+        />
+      </div>
+
+      <!-- Bio (Editable) -->
+      <div class="form-group">
+        <label>Bio</label>
+        <textarea 
+          [(ngModel)]="editForm.bio" 
+          [readonly]="!isEditing"
+          [class.readonly]="!isEditing"
+          class="form-control"
+          placeholder="Tell us about yourself"
+          rows="4"
+        ></textarea>
+        <small class="form-text">{{ editForm.bio.length || 0 }} / 500</small>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-buttons">
+        <button 
+          *ngIf="!isEditing" 
+          class="btn btn-primary" 
+          (click)="toggleEdit()"
+        >
+          Edit Profile
+        </button>
+        
+        <ng-container *ngIf="isEditing">
+          <button 
+            class="btn btn-success" 
+            (click)="saveProfile()"
+            [disabled]="isSaving"
+          >
+            {{ isSaving ? 'Saving...' : 'Save Changes' }}
+          </button>
+          <button 
+            class="btn btn-secondary" 
+            (click)="toggleEdit()"
+            [disabled]="isSaving"
+          >
+            Cancel
+          </button>
+        </ng-container>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-container" *ngIf="!profile">
+    <div class="spinner"></div>
+    <p>Loading profile...</p>
+  </div>
+</div>
+

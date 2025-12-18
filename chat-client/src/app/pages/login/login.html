@@ -99,6 +99,13 @@
         </div>
       }
 
+      @if (verificationMessage()) {
+        <div class="success-alert animate-slide-in">
+          <i class="fas fa-check-circle"></i>
+          <span>{{ verificationMessage() }}</span>
+        </div>
+      }
+
       @if (globalError()) {
         <div class="error-alert animate-shake">
           <i class="fas fa-exclamation-triangle"></i>

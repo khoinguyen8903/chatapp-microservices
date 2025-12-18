@@ -16,6 +16,23 @@ spring:
         jdbc:
           time_zone: Asia/Ho_Chi_Minh
 
+  # Email Configuration for Gmail SMTP
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:your-email@gmail.com}
+    password: ${MAIL_PASSWORD:your-app-password}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 logging:
   level:
     com.chatapp.api_gateway.util: INFO
@@ -23,3 +40,16 @@ logging:
 jwt:
   secret: "${JWT_SECRET}"
   expiration-ms: 86400000
+
+# Application specific settings
+app:
+  # Backend base URL (where this auth-service is running)
+  base-url: ${APP_BASE_URL:http://localhost:8081}
+  
+  # Frontend URL (where Angular app is running)
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:3000}
+  
+  # Email verification endpoint (MUST point to backend API)
+  # This is the link users will click in their email
+  # Format: http://localhost:8081/api/auth/verify?token=...
+  verification-url: ${APP_BASE_URL:http://localhost:8081}/api/auth/verify

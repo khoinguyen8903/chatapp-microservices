@@ -1,8 +1,10 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-login',
@@ -18,11 +20,14 @@ export class Login implements OnInit { // [MỚI] Implement OnInit
   
   authForm: FormGroup;
   globalError = signal<string>('');
+  verificationMessage = signal<string>('');
 
   constructor(
     private fb: FormBuilder,
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute,
+    private http: HttpClient
   ) {
     this.authForm = this.fb.group({
       username: ['', [
@@ -43,6 +48,20 @@ export class Login implements OnInit { // [MỚI] Implement OnInit
 
   // [MỚI] Kiểm tra nếu đã đăng nhập thì đá sang Chat luôn
   ngOnInit() {
+    // Check for verification status in query parameters
+    this.route.queryParams.subscribe(params => {
+      const verified = params['verified'];
+      const error = params['error'];
+      
+      if (verified === 'true') {
+        this.verificationMessage.set('Email verified successfully! You can now login.');
+        this.isLoginMode.set(true);
+      } else if (error === 'verification_failed') {
+        this.globalError.set('Verification link is invalid or expired.');
+        this.isLoginMode.set(true);
+      }
+    });
+
     if (this.authService.getToken()) {
       this.router.navigate(['/chat']);
     }
@@ -53,7 +72,18 @@ export class Login implements OnInit { // [MỚI] Implement OnInit
   toggleMode() {
     this.isLoginMode.update(prev => !prev);
     this.globalError.set('');
+    this.verificationMessage.set('');
     this.authForm.reset();
+    
+    // Update validators based on mode
+    if (!this.isLoginMode()) {
+      // Registration mode - make email required
+      this.authForm.get('email')?.setValidators([Validators.required, Validators.email]);
+    } else {
+      // Login mode - email not required
+      this.authForm.get('email')?.setValidators([Validators.email]);
+    }
+    this.authForm.get('email')?.updateValueAndValidity();
   }
 
   togglePassword() {
@@ -84,7 +114,8 @@ export class Login implements OnInit { // [MỚI] Implement OnInit
         error: (err) => {
           this.isLoading.set(false);
           if (err.status === 401 || err.status === 400) {
-             this.globalError.set('Sai tài khoản hoặc mật khẩu.');
+             const errorMsg = err.error?.error || err.error?.message || 'Sai tài khoản hoặc mật khẩu.';
+             this.globalError.set(errorMsg);
           } else {
              this.globalError.set('Lỗi kết nối đến máy chủ.');
           }
@@ -107,7 +138,7 @@ export class Login implements OnInit { // [MỚI] Implement OnInit
       }).subscribe({
         next: () => {
           this.isLoading.set(false);
-          alert('Đăng ký thành công! Vui lòng đăng nhập.');
+          this.verificationMessage.set('Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản.');
           this.toggleMode();
         },
         error: (err) => {

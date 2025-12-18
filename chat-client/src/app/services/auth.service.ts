@@ -8,7 +8,8 @@ export interface AuthResponse {
   token: string;
   userId: string;
   fullName: string;
-  username: string;
+  username?: string;
+  email?: string;
 }
 
 export interface LoginRequest {

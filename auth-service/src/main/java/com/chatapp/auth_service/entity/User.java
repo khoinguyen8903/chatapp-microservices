@@ -29,6 +29,23 @@ public class User implements UserDetails {
     // [SỬA Ở ĐÂY] Đổi displayName -> fullName
     private String fullName;
 
+    // Email verification fields
+    @Column(unique = true)
+    private String email;
+
+    @Column(nullable = false)
+    private Boolean isActive = false;
+
+    private String verificationToken;
+
+    // Profile fields
+    private String phone;
+    
+    @Column(length = 500)
+    private String bio;
+
+    private String avatarUrl;
+
     // --- Các phương thức bắt buộc của UserDetails ---
 
     @Override
@@ -63,6 +80,6 @@ public class User implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return isActive != null && isActive;
     }
 }

@@ -6,10 +6,12 @@ import com.chatapp.auth_service.dto.RegisterRequest;
 import com.chatapp.auth_service.entity.User;
 import com.chatapp.auth_service.service.AuthService;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.util.Map;
 
 @RestController
@@ -17,6 +19,9 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService svc;
+
+    @Value("${app.frontend-url:http://localhost:3000}")
+    private String frontendUrl;
 
     public AuthController(AuthService svc) {
         this.svc = svc;
@@ -73,6 +78,64 @@ public class AuthController {
             return ResponseEntity.ok(user);
         } else {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
+        }
+    }
+
+    // --- EMAIL VERIFICATION ENDPOINTS ---
+    @GetMapping("/verify")
+    public ResponseEntity<Void> verifyEmail(@RequestParam("token") String token) {
+        System.out.println("🔗 Verification request received with token: " + token);
+        
+        try {
+            svc.verifyEmail(token);
+            
+            // Success: redirect to frontend login page with verified=true
+            String redirectUrl = frontendUrl + "/login?verified=true";
+            System.out.println("✅ Email verified successfully. Redirecting to: " + redirectUrl);
+            
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(redirectUrl))
+                    .build();
+                    
+        } catch (IllegalArgumentException e) {
+            // Failure: redirect to frontend login page with error parameter
+            String redirectUrl = frontendUrl + "/login?error=verification_failed";
+            System.err.println("❌ Email verification failed: " + e.getMessage());
+            System.err.println("   Redirecting to: " + redirectUrl);
+            
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(redirectUrl))
+                    .build();
+        } catch (Exception e) {
+            // Catch any unexpected errors
+            String redirectUrl = frontendUrl + "/login?error=verification_failed";
+            System.err.println("❌ Unexpected error during verification: " + e.getMessage());
+            e.printStackTrace();
+            System.err.println("   Redirecting to: " + redirectUrl);
+            
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(redirectUrl))
+                    .build();
+        }
+    }
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<?> resendVerificationEmail(@RequestBody Map<String, String> request) {
+        try {
+            String email = request.get("email");
+            if (email == null || email.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Email is required"));
+            }
+            svc.resendVerificationEmail(email);
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Verification email resent successfully"
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "error", e.getMessage()
+            ));
         }
     }
 }
