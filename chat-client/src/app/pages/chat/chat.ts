@@ -42,7 +42,7 @@ export class Chat implements OnInit, OnDestroy {
       // Gọi service để xin quyền và gửi token lên Server
       this.notificationService.requestPermission(currentUserId);
     } else {
-      // Trường hợp hiếm: Vào trang Chat nhưng không tìm thấy ID trong bộ nhớ
+
       console.error('❌ Lỗi: Không tìm thấy User ID! Đang chuyển về trang đăng nhập...');
       this.router.navigate(['/login']);
     }

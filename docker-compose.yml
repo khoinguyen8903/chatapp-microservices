@@ -12,7 +12,7 @@ services:
     depends_on:
       - auth-service
       - chat-service
-      - media-service # Bổ sung phụ thuộc
+      - media-service
     environment:
       JWT_SECRET: "mysecretkey123456789012345678901234"
       JWT_EXPIRATION_MS: 86400000
@@ -28,7 +28,6 @@ services:
     depends_on:
       - postgres-db
     environment:
-      # Kết nối nội bộ Docker dùng tên service 'postgres-db'
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/authdb?options=-c%20timezone=Asia/Ho_Chi_Minh
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: 123456
@@ -36,7 +35,7 @@ services:
       JWT_SECRET: "mysecretkey123456789012345678901234"
       JWT_EXPIRATION_MS: 86400000
 
-  # --- AUTH DATABASE (Postgres - Port 5432) ---
+  # --- AUTH DATABASE ---
   postgres-db:
     image: postgres:15
     container_name: postgres-db
@@ -52,7 +51,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # --- MEDIA SERVICE (JAVA APP - MỚI BỔ SUNG) ---
+  # --- MEDIA SERVICE ---
   media-service:
     build: ./media-service
     container_name: media-service
@@ -65,40 +64,37 @@ services:
       - minio
     environment:
       SERVER_PORT: 8083
-      # Cấu hình DB: Dùng tên container 'media-db' và cổng trong 5432
       SPRING_DATASOURCE_URL: jdbc:postgresql://media-db:5432/mediadb?options=-c%20timezone=Asia/Ho_Chi_Minh
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: 123456
-      
-      # Cấu hình MinIO: Dùng tên container 'minio' và cổng 9000
       MINIO_URL: http://minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: chatapp-files
 
-  # --- MEDIA DATABASE (Postgres - Port 5434) ---
+  # --- MEDIA DATABASE ---
   media-db:
     image: postgres:15
     container_name: media-db
     ports:
-      - "5434:5432" # Map cổng 5434 máy ngoài vào 5432 máy trong
+      - "5434:5432"
     networks:
       - app-network
     environment:
-      POSTGRES_DB: mediadb    
+      POSTGRES_DB: mediadb     
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123456
-      TZ: Asia/Ho_Chi_Minh # Sửa lỗi Timezone
+      TZ: Asia/Ho_Chi_Minh
     volumes:
       - media_data:/var/lib/postgresql/data
 
-  # --- MINIO OBJECT STORAGE ---
+  # --- MINIO ---
   minio:
     image: minio/minio:latest
     container_name: minio
     ports:
-      - "9000:9000"  # Cổng API upload file
-      - "9001:9001"  # Cổng giao diện quản lý (Console)
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -123,7 +119,7 @@ services:
       SPRING_DATA_MONGODB_URI: mongodb://chat-mongo:27017/chatdb
       NOTIFICATION_SERVICE_URL: http://notification-service:8080
 
-  # --- CHAT DATABASE (MongoDB) ---
+  # --- CHAT DATABASE ---
   chat-mongo:
     image: mongo:6.0
     container_name: chat-mongo
@@ -134,7 +130,7 @@ services:
     volumes:
       - chat_mongo_data:/data/db
 
-  # --- FRONTEND (Angular) ---
+  # --- FRONTEND ---
   frontend:
     build: ./chat-client
     container_name: chat-frontend
@@ -144,6 +140,8 @@ services:
       - app-network
     depends_on:
       - api-gateway
+
+  # --- REDIS ---
   redis:
     image: redis:alpine
     container_name: chat-redis
@@ -151,23 +149,34 @@ services:
       - "6379:6379"
     networks:
       - app-network 
+
+  # --- NOTIFICATION SERVICE ---
   notification-service:
-    build: ./notification-service  # Tên thư mục chứa code của bạn
+    build: ./notification-service 
     container_name: notification-service
     ports:
-      - "8084:8080" # Máy ngoài 8084 -> Docker 8080
+      - "8084:8080"
     networks:
       - app-network
     depends_on:
-      - redis # Phải đợi Redis chạy xong mới chạy cái này
+      - redis
     environment:
       SERVER_PORT: 8080
-      # Cấu hình Redis (trỏ vào service 'redis' trong file này)
       SPRING_DATA_REDIS_HOST: redis 
       SPRING_DATA_REDIS_PORT: 6379
-      # Firebase Config
-      # Đảm bảo file serviceAccountKey.json đã được copy vào khi build Docker
       APP_FIREBASE_CONFIG: classpath:firebase-service-account.json
+
+  # --- CLOUDFLARE TUNNEL (ĐÃ THÊM MỚI) ---
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflare-tunnel
+    restart: unless-stopped
+    command: tunnel run
+    networks:
+      - app-network
+    environment:
+      # Token đã được thêm vào đây
+      TUNNEL_TOKEN: "eyJhIjoiNTdhODE2YjBhN2Y1ZjY2NTZjOTBhZTdiYTYwM2U3ZDUiLCJ0IjoiZTg5YzkwOWItYWQ5Mi00YzA3LWJkZWUtMGI1NmMyMjU0MGY0IiwicyI6Ik5qWXdPRFE0TURjdE9EVXhaQzAwTTJOaUxUZzVOV1F0WXpSa1pUQmlNemxoWkRRMSJ9"
 
 # --- NETWORKS & VOLUMES ---
 networks:

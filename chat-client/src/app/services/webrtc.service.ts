@@ -1,13 +1,16 @@
 import { Injectable, signal } from '@angular/core';
 import { ChatService } from './chat.service';
-import { BehaviorSubject, Subject } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 
-// Cấu hình STUN Server (Của Google - Miễn phí)
-// Giúp 2 máy tìm thấy IP của nhau qua Internet
+// [CẤU HÌNH QUAN TRỌNG] Danh sách STUN Server của Google
+// Giúp 2 máy tìm thấy nhau xuyên qua 3G/4G/Wifi khác mạng
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
   ]
 };
 
@@ -25,7 +28,7 @@ export class WebRTCService {
   localStream$ = new BehaviorSubject<MediaStream | null>(null);
   // Stream của đối phương (để hiện lên màn hình lớn)
   remoteStream$ = new BehaviorSubject<MediaStream | null>(null);
-  // [MỚI] Trạng thái loại cuộc gọi (Video hay Audio)
+  // Trạng thái loại cuộc gọi (Video hay Audio)
   isVideoCall$ = new BehaviorSubject<boolean>(true);
   
   // Trạng thái cuộc gọi: 'IDLE' | 'INCOMING' | 'OUTGOING' | 'CONNECTED'
@@ -34,7 +37,7 @@ export class WebRTCService {
   constructor(private chatService: ChatService) {
     // Lắng nghe tín hiệu từ Backend trả về
     this.chatService.onCallMessage().subscribe(async (msg: any) => {
-       await this.handleServerSignal(msg);
+        await this.handleServerSignal(msg);
     });
   }
 
@@ -63,7 +66,8 @@ export class WebRTCService {
   // ==========================================
   private async handleServerSignal(msg: any) {
     // Nếu là tin nhắn của chính mình gửi đi (trong Group) thì bỏ qua
-    // (Logic này tùy thuộc vào việc Backend có gửi lại cho người gửi không)
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    if (msg.senderId === currentUser.id) return;
     
     switch (msg.type) {
       case 'OFFER':
@@ -102,12 +106,10 @@ export class WebRTCService {
     this.isGroupCall = msg.isGroup;
     this.callState.set('INCOMING');
     
-    // [MỚI] Cập nhật loại cuộc gọi dựa trên tín hiệu nhận được
+    // Cập nhật loại cuộc gọi dựa trên tín hiệu nhận được
     this.isVideoCall$.next(msg.videoEnabled !== false); 
     
-    // Lưu tạm Offer để khi bấm "Nghe" sẽ xử lý
-    // Ở đây xử lý luôn cho đơn giản, thực tế sẽ chờ UI bấm nút
-    // Nhưng WebRTC cần PeerConnection để setRemoteDescription
+    // Lưu tạm Offer và tạo Peer để chuẩn bị nhận
     this.createPeerConnection();
     await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(msg.data));
   }
@@ -126,7 +128,7 @@ export class WebRTCService {
 
   // Hành động: Từ chối cuộc gọi
   rejectCall() {
-    this.sendSignal('HANGUP', {}); // Hoặc REJECT
+    this.sendSignal('HANGUP', {}); 
     this.endCall();
   }
 
@@ -153,9 +155,9 @@ export class WebRTCService {
 
       // Add Track vào Peer (nếu Peer đã tạo)
       if (this.peerConnection) {
-         stream.getTracks().forEach(track => {
-             this.peerConnection!.addTrack(track, stream);
-         });
+          stream.getTracks().forEach(track => {
+              this.peerConnection!.addTrack(track, stream);
+          });
       }
     } catch (err) {
       console.error('Không thể truy cập Camera/Mic:', err);
@@ -165,6 +167,7 @@ export class WebRTCService {
 
   // Khởi tạo Peer Connection
   private createPeerConnection() {
+    // Dùng cấu hình Google STUN
     this.peerConnection = new RTCPeerConnection(RTC_CONFIG);
 
     // 1. Khi tìm thấy đường mạng (ICE Candidate) -> Gửi cho đối phương
@@ -215,7 +218,6 @@ export class WebRTCService {
 
   // Helper gửi tin qua ChatService
   private sendSignal(type: string, data: any) {
-    // Lấy thông tin user hiện tại từ localStorage hoặc ChatFacade
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     
     const payload = {
@@ -224,7 +226,7 @@ export class WebRTCService {
         type: type,
         data: data,
         isGroup: this.isGroupCall,
-        videoEnabled: this.isVideoCall$.value // [MỚI] Gửi kèm trạng thái video
+        videoEnabled: this.isVideoCall$.value
     };
 
     this.chatService.sendCallSignal(payload);

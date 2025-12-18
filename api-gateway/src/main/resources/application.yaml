@@ -11,6 +11,23 @@ spring:
     name: api-gateway
   cloud:
     gateway:
+      # --- [MỚI] CẤU HÌNH CORS TOÀN CỤC (Cực quan trọng) ---
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "https://chatify.asia"
+              - "https://www.chatify.asia"
+              - "http://localhost:4200"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+
       routes:
         # 1. AUTH SERVICE
         - id: auth-service
@@ -44,20 +61,25 @@ spring:
           predicates:
             - Path=/ws/**
           filters:
+            # WebSocket cần header đặc biệt, nhưng Global Cors ở trên đã lo phần Origin rồi
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
-        # 5. [MỚI] MEDIA SERVICE - Upload & Xem ảnh
+        # 5. MEDIA SERVICE - Upload & Xem ảnh
         - id: media-service
           uri: http://media-service:8083
           predicates:
             - Path=/api/v1/media/**
           filters:
-            - AuthenticationFilter # Yêu cầu đăng nhập mới được upload
+            - AuthenticationFilter
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+
+        # 6. NOTIFICATION SERVICE
         - id: notification-service
           uri: http://notification-service:8080
           predicates:
             - Path=/api/notifications/**
+          filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
 jwt:
   secret: "mysecretkey123456789012345678901234"

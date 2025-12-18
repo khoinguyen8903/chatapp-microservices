@@ -1,6 +1,7 @@
 export const environment = {
-  production: false,
-  apiUrl: 'http://192.168.1.8:8080',
+  production: true,
+  apiUrl: 'https://api.chatify.asia',
+  wsUrl: 'wss://api.chatify.asia/ws',
   firebase: {
     apiKey: "AIzaSyB19z3A6pmOYL1eCisMcjCBGOjRNCYAy-0",
     authDomain: "chat-app-25e3f.firebaseapp.com",

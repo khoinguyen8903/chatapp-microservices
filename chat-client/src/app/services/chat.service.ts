@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { environment } from '../../environments/environment';
 import { 
   ChatMessage, 
   ChatRoom, 
@@ -17,7 +18,7 @@ import { Stomp } from '@stomp/stompjs';
   providedIn: 'root'
 })
 export class ChatService {
-  private apiUrl = 'http://192.168.1.8:8080'; 
+  private apiUrl = environment.apiUrl;
   private stompClient: any;
   
   private messageSubject = new Subject<ChatMessage>();

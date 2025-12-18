@@ -19,8 +19,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // --- QUAN TRỌNG: Thêm "/topic" vào đây ---
-        // Cho phép server gửi tin nhắn đến các kênh bắt đầu bằng /topic/
+        // Cho phép server gửi tin nhắn đến các kênh bắt đầu bằng /topic/ và /user/
         registry.enableSimpleBroker("/user", "/topic");
 
         registry.setApplicationDestinationPrefixes("/app");
@@ -30,11 +29,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*") // Cho phép mọi nguồn (CORS)
+                // Sử dụng setAllowedOriginPatterns("*") thay vì setAllowedOrigins("*")
+                // để tránh lỗi khi dùng allowCredentials(true) ở Gateway
+                .setAllowedOriginPatterns("*")
                 .withSockJS();
     }
 
-    // Cấu hình Converter để xử lý JSON đúng cách (Tránh lỗi parse JSON)
     @Override
     public boolean configureMessageConverters(List<MessageConverter> messageConverters) {
         DefaultContentTypeResolver resolver = new DefaultContentTypeResolver();
