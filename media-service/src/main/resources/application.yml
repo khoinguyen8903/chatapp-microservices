@@ -5,8 +5,10 @@ spring:
   application:
     name: media-service
 
+  # Cấu hình Database
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/mediadb?options=-c%20timezone=Asia/Ho_Chi_Minh}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/mediadb?options=-c%20timezone=Asia/Ho_Chi_Minh}
+    # Lưu ý: Nếu chạy Docker thì host là 'postgres', chạy local là 'localhost'
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:123456}
     driver-class-name: org.postgresql.Driver
@@ -18,17 +20,27 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-
         jdbc:
           time_zone: Asia/Ho_Chi_Minh
 
+  # Giới hạn dung lượng file upload (50MB)
   servlet:
     multipart:
       max-file-size: 50MB
       max-request-size: 50MB
 
+  # Tắt Security mặc định để tránh lỗi chuyển hướng login
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+
 minio:
-  url: ${MINIO_URL:http://localhost:9000}
+  # URL nội bộ để service kết nối (trong Docker gọi là 'minio')
+  url: ${MINIO_URL:http://minio:9000}
+  
+  # URL Public trả về cho Frontend (Phải là domain của Gateway)
+  # Frontend sẽ gọi link này -> Gateway -> MinIO
+  public-url: ${MINIO_PUBLIC_URL:https://api.chatify.asia}
+
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
   secret-key: ${MINIO_SECRET_KEY:minioadmin}
   bucket-name: ${MINIO_BUCKET:chatapp-files}

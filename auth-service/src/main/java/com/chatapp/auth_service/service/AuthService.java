@@ -3,6 +3,7 @@ package com.chatapp.auth_service.service;
 import com.chatapp.auth_service.dto.LoginRequest;
 import com.chatapp.auth_service.dto.LoginResponse;
 import com.chatapp.auth_service.dto.RegisterRequest;
+import com.chatapp.auth_service.dto.UserProfileResponse;
 import com.chatapp.auth_service.entity.User;
 import com.chatapp.auth_service.repository.UserRepository;
 import com.chatapp.auth_service.security.JwtService;
@@ -36,14 +37,14 @@ public class AuthService {
         if (userRepository.existsByUsername(req.getUsername())) {
             throw new IllegalArgumentException("Username already exists");
         }
-        
+
         if (userRepository.existsByEmail(req.getEmail())) {
             throw new IllegalArgumentException("Email already exists");
         }
-        
+
         // Generate verification token
         String verificationToken = UUID.randomUUID().toString();
-        
+
         User user = User.builder()
                 .username(req.getUsername())
                 .password(passwordEncoder.encode(req.getPassword()))
@@ -53,10 +54,10 @@ public class AuthService {
                 .verificationToken(verificationToken)
                 .build();
         userRepository.save(user);
-        
+
         // Send verification email asynchronously
         emailService.sendVerificationEmail(user.getEmail(), verificationToken, user.getUsername());
-        
+
         return user.getId();
     }
 
@@ -102,7 +103,7 @@ public class AuthService {
     @Transactional
     public boolean verifyEmail(String token) {
         System.out.println("🔍 Verifying email with token: " + token);
-        
+
         User user = userRepository.findByVerificationToken(token)
                 .orElseThrow(() -> {
                     System.err.println("❌ Invalid verification token: " + token);
@@ -119,10 +120,10 @@ public class AuthService {
         // Set user as active and clear verification token
         user.setIsActive(true);
         user.setVerificationToken(null);
-        
+
         // CRITICAL: Save the user to persist changes to database
         User savedUser = userRepository.save(user);
-        
+
         System.out.println("✅ User verified and saved successfully: " + savedUser.getUsername() + " (New active status: " + savedUser.getIsActive() + ")");
 
         // Send welcome email asynchronously
@@ -175,5 +176,26 @@ public class AuthService {
     public User getProfile(String userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    }
+
+    /**
+     * Helper method to map User entity to UserProfileResponse DTO
+     * This prevents Jackson circular reference issues
+     */
+    public UserProfileResponse mapToProfileResponse(User user) {
+        if (user == null) {
+            return null;
+        }
+
+        return UserProfileResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .bio(user.getBio())
+                .avatarUrl(user.getAvatarUrl())
+                .isActive(user.getIsActive())
+                .build();
     }
 }

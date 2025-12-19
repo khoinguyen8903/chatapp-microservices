@@ -1,4 +1,4 @@
-package com.chatapp.chat_service.model;
+package com.chatapp.chat_service.enums;
 
 public enum CallType {
     OFFER,          // Người gọi gửi lời mời (kèm SDP)

@@ -2,77 +2,79 @@ package com.chatapp.auth_service.controller;
 
 import com.chatapp.auth_service.dto.UpdateProfileRequest;
 import com.chatapp.auth_service.dto.UserProfileResponse;
-import com.chatapp.auth_service.dto.UserResponse;
 import com.chatapp.auth_service.entity.User;
-import com.chatapp.auth_service.repository.UserRepository;
 import com.chatapp.auth_service.service.AuthService;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/users") // Đường dẫn chuẩn mà Chat Service đang gọi
+@RequestMapping("/api/users")
 public class UserController {
 
-    @Autowired
-    private UserRepository userRepository;
+    private final AuthService authService;
 
-    @Autowired
-    private AuthService authService;
-
-    // API lấy thông tin user theo ID
-    @GetMapping("/{id}")
-    public ResponseEntity<UserResponse> getUserById(@PathVariable String id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
-
-        // Trả về DTO chứa username, fullName và avatarUrl
-        return ResponseEntity.ok(UserResponse.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .fullName(user.getFullName())
-                .avatarUrl(user.getAvatarUrl())
-                .build());
+    public UserController(AuthService authService) {
+        this.authService = authService;
     }
 
-    // Get current user's profile
+    // --- Helper function để lấy ID từ Security Context an toàn ---
+    private String getAuthenticatedUserId() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return null;
+        }
+
+        Object principal = auth.getPrincipal();
+
+        // Kiểm tra xem principal là Object User hay là String
+        if (principal instanceof User) {
+            return ((User) principal).getId();
+        } else if (principal instanceof UserDetails) {
+            // Trường hợp dùng UserDetails mặc định khác
+            // Lưu ý: Nếu username không phải ID, logic này cần check lại tùy cấu hình JWT
+            return ((UserDetails) principal).getUsername();
+        } else {
+            // Trường hợp Principal là String (thường là 'sub' trong JWT)
+            return principal.toString();
+        }
+    }
+
+    /**
+     * GET /api/users/profile
+     */
     @GetMapping("/profile")
     public ResponseEntity<UserProfileResponse> getCurrentUserProfile() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) {
+        String userId = getAuthenticatedUserId();
+        if (userId == null) {
             return ResponseEntity.status(401).build();
         }
-        
-        String userId = String.valueOf(auth.getPrincipal());
+
+        System.out.println("🔍 Getting profile for User ID: " + userId); // Log để debug
+
         User user = authService.getProfile(userId);
-        
-        UserProfileResponse response = UserProfileResponse.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .fullName(user.getFullName())
-                .email(user.getEmail())
-                .phone(user.getPhone())
-                .bio(user.getBio())
-                .avatarUrl(user.getAvatarUrl())
-                .isActive(user.getIsActive())
-                .build();
-        
-        return ResponseEntity.ok(response);
+        if (user == null) {
+            System.err.println("❌ User not found in DB with ID: " + userId);
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(authService.mapToProfileResponse(user));
     }
 
-    // Update current user's profile
+    /**
+     * PUT /api/users/profile
+     */
     @PutMapping("/profile")
     public ResponseEntity<UserProfileResponse> updateCurrentUserProfile(
             @Valid @RequestBody UpdateProfileRequest request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) {
+
+        String userId = getAuthenticatedUserId();
+        if (userId == null) {
             return ResponseEntity.status(401).build();
         }
-        
-        String userId = String.valueOf(auth.getPrincipal());
+
         User updatedUser = authService.updateProfile(
                 userId,
                 request.getFullName(),
@@ -80,36 +82,19 @@ public class UserController {
                 request.getBio(),
                 request.getAvatarUrl()
         );
-        
-        UserProfileResponse response = UserProfileResponse.builder()
-                .id(updatedUser.getId())
-                .username(updatedUser.getUsername())
-                .fullName(updatedUser.getFullName())
-                .email(updatedUser.getEmail())
-                .phone(updatedUser.getPhone())
-                .bio(updatedUser.getBio())
-                .avatarUrl(updatedUser.getAvatarUrl())
-                .isActive(updatedUser.getIsActive())
-                .build();
-        
-        return ResponseEntity.ok(response);
+
+        return ResponseEntity.ok(authService.mapToProfileResponse(updatedUser));
     }
 
-    // Get any user's profile by ID (public profile info)
-    @GetMapping("/{id}/profile")
-    public ResponseEntity<UserProfileResponse> getUserProfile(@PathVariable String id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
-        
-        UserProfileResponse response = UserProfileResponse.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .fullName(user.getFullName())
-                .phone(user.getPhone())
-                .bio(user.getBio())
-                .avatarUrl(user.getAvatarUrl())
-                .build();
-        
-        return ResponseEntity.ok(response);
+    /**
+     * GET /api/users/{userId}/profile
+     */
+    @GetMapping("/{userId}/profile")
+    public ResponseEntity<UserProfileResponse> getUserProfileById(@PathVariable String userId) {
+        User user = authService.findUserById(userId);
+        if (user == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(authService.mapToProfileResponse(user));
     }
 }

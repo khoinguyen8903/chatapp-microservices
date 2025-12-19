@@ -1,8 +1,6 @@
 package com.chatapp.media_service.controller;
 
-
 import com.chatapp.media_service.entity.MediaFile;
-import com.chatapp.media_service.repository.MediaFileRepository;
 import com.chatapp.media_service.service.MinioStorageService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,47 +14,42 @@ import java.util.Map;
 public class MediaController {
 
     private final MinioStorageService minioStorageService;
-    private final MediaFileRepository mediaFileRepository;
 
-    public MediaController(MinioStorageService minioStorageService, MediaFileRepository mediaFileRepository) {
+    public MediaController(MinioStorageService minioStorageService) {
         this.minioStorageService = minioStorageService;
-        this.mediaFileRepository = mediaFileRepository;
     }
 
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
     public ResponseEntity<?> uploadFile(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "uploaderId", required = false) String uploaderId // ID người gửi
+            // [KIẾN TRÚC CHUẨN] Nhận ID từ Header do Gateway gửi xuống
+            // Gateway sẽ giải mã token và nhét ID vào header này
+            @RequestHeader(value = "X-User-Id", required = false) String userId
     ) {
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body("File is empty");
         }
 
         try {
-            // 1. Upload lên MinIO
-            String storedFileName = minioStorageService.uploadFileToMinio(file);
-            String publicUrl = minioStorageService.getPublicUrl(storedFileName);
+            // Nếu Gateway quên gửi hoặc user chưa login, ta coi là anonymous
+            if (userId == null || userId.isEmpty()) {
+                userId = "anonymous";
+            }
 
-            // 2. Lưu metadata vào DB
-            MediaFile mediaFile = MediaFile.builder()
-                    .fileName(file.getOriginalFilename())
-                    .contentType(file.getContentType())
-                    .size(file.getSize())
-                    .url(publicUrl)
-                    .uploaderId(uploaderId != null ? uploaderId : "anonymous")
-                    .build();
+            // Gọi Service xử lý
+            MediaFile savedFile = minioStorageService.uploadFile(file, userId);
 
-            mediaFileRepository.save(mediaFile);
-
-            // 3. Trả về kết quả cho Client
+            // Trả về kết quả
             Map<String, Object> response = new HashMap<>();
-            response.put("url", publicUrl);
-            response.put("type", file.getContentType());
-            response.put("fileName", file.getOriginalFilename());
+            response.put("url", savedFile.getUrl());
+            response.put("fileName", savedFile.getFileName());
+            response.put("type", savedFile.getContentType());
+            response.put("size", savedFile.getSize());
 
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.internalServerError().body("Upload failed: " + e.getMessage());
         }
     }

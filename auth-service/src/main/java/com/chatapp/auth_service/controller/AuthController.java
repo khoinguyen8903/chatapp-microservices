@@ -3,6 +3,7 @@ package com.chatapp.auth_service.controller;
 import com.chatapp.auth_service.dto.LoginRequest;
 import com.chatapp.auth_service.dto.LoginResponse;
 import com.chatapp.auth_service.dto.RegisterRequest;
+import com.chatapp.auth_service.dto.UserProfileResponse;
 import com.chatapp.auth_service.entity.User;
 import com.chatapp.auth_service.service.AuthService;
 import jakarta.validation.Valid;
@@ -41,11 +42,24 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<?> me() {
-        // As example, shows secured endpoint returning authenticated userId from principal
+        // Returns full user profile for authenticated user
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) return ResponseEntity.status(401).build();
+        
         String userId = String.valueOf(auth.getPrincipal());
-        return ResponseEntity.ok().body("{\"userId\":\"" + userId + "\"}");
+        User user = svc.getProfile(userId);
+        
+        // Return full user profile including avatarUrl
+        return ResponseEntity.ok(Map.of(
+            "userId", user.getId(),
+            "username", user.getUsername(),
+            "fullName", user.getFullName(),
+            "email", user.getEmail(),
+            "phone", user.getPhone() != null ? user.getPhone() : "",
+            "bio", user.getBio() != null ? user.getBio() : "",
+            "avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : "",
+            "isActive", user.getIsActive()
+        ));
     }
 
     // API kiểm tra user tồn tại & trả về ID (Dùng khi tìm kiếm để tạo chat mới)
@@ -70,14 +84,15 @@ public class AuthController {
     // --- MỚI THÊM: API lấy thông tin user theo ID ---
     // API này giúp Frontend đổi UUID (ví dụ: 56f9...) thành tên hiển thị (ví dụ: admin)
     @GetMapping("/users/{userId}")
-    public ResponseEntity<?> getUserById(@PathVariable String userId) {
-        // Lưu ý: Đảm bảo AuthService đã có hàm findUserById
+    public ResponseEntity<UserProfileResponse> getUserById(@PathVariable String userId) {
         User user = svc.findUserById(userId);
 
         if (user != null) {
-            return ResponseEntity.ok(user);
+            // Use DTO to prevent Jackson circular reference
+            UserProfileResponse response = svc.mapToProfileResponse(user);
+            return ResponseEntity.ok(response);
         } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
     }
 

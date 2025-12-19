@@ -11,7 +11,7 @@ spring:
     name: api-gateway
   cloud:
     gateway:
-      # --- [MỚI] CẤU HÌNH CORS TOÀN CỤC (Cực quan trọng) ---
+      # --- CẤU HÌNH CORS TOÀN CỤC ---
       globalcors:
         cors-configurations:
           '[/**]':
@@ -37,7 +37,16 @@ spring:
           filters:
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
-        # 2. CHAT SERVICE - Lấy tin nhắn
+        # 2. USER SERVICE (Đi qua Auth Service)
+        - id: user-service
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - AuthenticationFilter
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+
+        # 3. CHAT SERVICE - Messages
         - id: chat-service-messages
           uri: http://chat-service:8082
           predicates:
@@ -46,7 +55,7 @@ spring:
             - AuthenticationFilter
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
-        # 3. CHAT SERVICE - Lấy danh sách phòng
+        # 4. CHAT SERVICE - Rooms
         - id: chat-service-rooms
           uri: http://chat-service:8082
           predicates:
@@ -55,16 +64,15 @@ spring:
             - AuthenticationFilter
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
-        # 4. CHAT SERVICE - WebSocket
+        # 5. CHAT SERVICE - WebSocket
         - id: chat-service-ws
           uri: http://chat-service:8082
           predicates:
             - Path=/ws/**
           filters:
-            # WebSocket cần header đặc biệt, nhưng Global Cors ở trên đã lo phần Origin rồi
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
-        # 5. MEDIA SERVICE - Upload & Xem ảnh
+        # 6. MEDIA SERVICE - Upload API (Có /v1)
         - id: media-service
           uri: http://media-service:8083
           predicates:
@@ -73,7 +81,7 @@ spring:
             - AuthenticationFilter
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
-        # 6. NOTIFICATION SERVICE
+        # 7. NOTIFICATION SERVICE
         - id: notification-service
           uri: http://notification-service:8080
           predicates:
@@ -81,8 +89,17 @@ spring:
           filters:
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
+        # 👇 [QUAN TRỌNG] 8. MINIO ROUTE - ĐỂ XEM/TẢI ẢNH
+        - id: minio-file-access
+          uri: http://minio:9000
+          predicates:
+            - Path=/chatapp-files/**
+          filters:
+            # Route này KHÔNG có AuthenticationFilter để ảnh public ai cũng xem được
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+
 jwt:
-  secret: "mysecretkey123456789012345678901234"
+  secret: "mysecretkey123456789012345678901234" # Thay bằng secret thật của bạn
 
 eureka:
   client:
