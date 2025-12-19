@@ -35,10 +35,13 @@ public class NotificationController {
         // [FIX] Dùng String.valueOf để tránh lỗi ép kiểu null
         String userId = String.valueOf(request.get("userId"));
 
-        // Kiểm tra null an toàn ngay từ Controller
-        String senderName = request.get("senderName") != null ? String.valueOf(request.get("senderName")) : "Tin nhắn mới";
+        // [UPDATED] Fallback to "Người lạ" (Stranger) when senderName is missing
+        String senderName = request.get("senderName") != null ? String.valueOf(request.get("senderName")) : "Người lạ";
         String body = request.get("body") != null ? String.valueOf(request.get("body")) : "";
         String roomId = request.get("roomId") != null ? String.valueOf(request.get("roomId")) : "";
+
+        // Log what we received
+        System.out.println("📥 [NotificationController] Received request - userId: " + userId + ", senderName: " + senderName);
 
         notificationService.sendChatNotification(userId, senderName, body, roomId);
 

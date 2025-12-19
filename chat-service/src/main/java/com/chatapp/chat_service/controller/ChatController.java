@@ -1,6 +1,6 @@
 package com.chatapp.chat_service.controller;
 
-import com.chatapp.chat_service.enums.MessageStatus; // [MỚI] Import Enum
+import com.chatapp.chat_service.enums.MessageStatus;
 import com.chatapp.chat_service.model.ChatMessage;
 import com.chatapp.chat_service.model.ChatNotification;
 import com.chatapp.chat_service.model.ChatRoom;
@@ -32,17 +32,26 @@ public class ChatController {
     @Autowired private ChatRoomService chatRoomService;
     @Autowired private UserStatusService userStatusService;
 
-    // 1. Chat Message Processing (Updated)
+    // 1. XỬ LÝ TIN NHẮN
     @MessageMapping("/chat")
-    public void processMessage(@Payload ChatMessage chatMessage) {
+    public void processMessage(@Payload ChatMessage chatMessage, SimpMessageHeaderAccessor headerAccessor) {
         try {
+            // [LOGIC CHUẨN] Lấy tên từ Session (Do WebSocketConfig đã lưu vào đây)
+            String senderName = "Người lạ";
+
+            if (headerAccessor.getSessionAttributes() != null && headerAccessor.getSessionAttributes().containsKey("username")) {
+                senderName = (String) headerAccessor.getSessionAttributes().get("username");
+            }
+
+            System.out.println("📨 [ChatController] Xử lý tin nhắn từ: " + senderName + " (ID: " + chatMessage.getSenderId() + ")");
+
             Optional<ChatRoom> groupRoom = chatRoomService.findByChatId(chatMessage.getRecipientId());
 
             if (groupRoom.isPresent() && groupRoom.get().isGroup()) {
                 // --- GROUP CHAT ---
                 ChatRoom room = groupRoom.get();
                 chatMessage.setChatId(room.getChatId());
-                ChatMessage savedMsg = chatMessageService.save(chatMessage);
+                ChatMessage savedMsg = chatMessageService.save(chatMessage, senderName);
 
                 for (String memberId : room.getMemberIds()) {
                     messagingTemplate.convertAndSend(
@@ -50,10 +59,11 @@ public class ChatController {
                             ChatNotification.builder()
                                     .id(savedMsg.getId())
                                     .senderId(savedMsg.getSenderId())
+                                    .senderName(senderName)
                                     .recipientId(room.getChatId())
                                     .content(savedMsg.getContent())
                                     .type(savedMsg.getType())
-                                    .status(savedMsg.getStatus()) // [MỚI] Kèm status SENT
+                                    .status(savedMsg.getStatus())
                                     .build()
                     );
                 }
@@ -69,20 +79,19 @@ public class ChatController {
                     chatMessage.setChatId(chatIdSender.get());
                 }
 
-                ChatMessage savedMsg = chatMessageService.save(chatMessage);
+                ChatMessage savedMsg = chatMessageService.save(chatMessage, senderName);
 
                 ChatNotification notification = ChatNotification.builder()
                         .id(savedMsg.getId())
                         .senderId(savedMsg.getSenderId())
+                        .senderName(senderName)
                         .recipientId(savedMsg.getRecipientId())
                         .content(savedMsg.getContent())
                         .type(savedMsg.getType())
-                        .status(savedMsg.getStatus()) // [MỚI] Kèm status SENT
+                        .status(savedMsg.getStatus())
                         .build();
 
-                // Gửi cho người nhận
                 messagingTemplate.convertAndSend("/topic/" + chatMessage.getRecipientId(), notification);
-                // Gửi lại cho người gửi (để hiện tin nhắn vừa gửi)
                 messagingTemplate.convertAndSend("/topic/" + chatMessage.getSenderId(), notification);
             }
         } catch (Exception e) {
@@ -90,35 +99,49 @@ public class ChatController {
         }
     }
 
-    // --- [MỚI] XỬ LÝ CẬP NHẬT TRẠNG THÁI (SEEN/DELIVERED) ---
+    // 2. KHI NGƯỜI DÙNG KẾT NỐI (User Online)
+    @MessageMapping("/user.addUser")
+    public void addUser(@Payload String userId, SimpMessageHeaderAccessor headerAccessor) {
+        String senderName = "Người lạ";
+
+        // Lấy tên từ Session (Đã được HandshakeInterceptor xử lý)
+        if (headerAccessor.getSessionAttributes() != null && headerAccessor.getSessionAttributes().containsKey("username")) {
+            senderName = (String) headerAccessor.getSessionAttributes().get("username");
+        }
+
+        // Lưu UserId vào session để dùng khi disconnect
+        if (headerAccessor.getSessionAttributes() != null) {
+            headerAccessor.getSessionAttributes().put("userId", userId);
+        }
+
+        userStatusService.saveUserOnline(userId);
+        messagingTemplate.convertAndSend("/topic/status/" + userId,
+                Map.of("status", "ONLINE", "userId", userId));
+
+        System.out.println("✅ User Connected: " + userId + " | Name: " + senderName);
+    }
+
+    // --- CÁC PHẦN DƯỚI GIỮ NGUYÊN ---
+
     @MessageMapping("/status")
     public void processStatus(@Payload Map<String, String> payload) {
         try {
-            // Frontend gửi lên: { senderId: "A", recipientId: "B", status: "SEEN" }
-            // Nghĩa là: B đang báo là "Tôi đã đọc tin nhắn của A"
-            String senderId = payload.get("senderId");    // Người gửi tin nhắn gốc
-            String recipientId = payload.get("recipientId"); // Người đang đọc (Mình)
+            String senderId = payload.get("senderId");
+            String recipientId = payload.get("recipientId");
             String statusStr = payload.get("status");
-
             MessageStatus status = MessageStatus.valueOf(statusStr);
 
-            // 1. Update trong Database
             chatMessageService.updateStatuses(senderId, recipientId, status);
 
-            // 2. Báo cho Người gửi tin nhắn (A) biết là B đã đọc rồi
-            // A sẽ nghe ở topic của chính A, nhận được tin báo update
             messagingTemplate.convertAndSend("/topic/" + senderId, Map.of(
                     "type", "STATUS_UPDATE",
-                    "contactId", recipientId, // Tin nhắn của ai gửi cho A đã được đọc? (Là B đọc)
+                    "contactId", recipientId,
                     "status", status
             ));
-
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
-
-    // --- CÁC PHẦN DƯỚI GIỮ NGUYÊN ---
 
     @PostMapping("/rooms/group")
     public ResponseEntity<ChatRoom> createGroup(@RequestBody Map<String, Object> payload) {
@@ -143,21 +166,14 @@ public class ChatController {
         }
     }
 
-    @MessageMapping("/user.addUser")
-    public void addUser(@Payload String userId, SimpMessageHeaderAccessor headerAccessor) {
-        if (headerAccessor.getSessionAttributes() != null) {
-            headerAccessor.getSessionAttributes().put("userId", userId);
-        }
-        userStatusService.saveUserOnline(userId);
-        messagingTemplate.convertAndSend("/topic/status/" + userId,
-                Map.of("status", "ONLINE", "userId", userId));
-        System.out.println("User Online: " + userId);
-    }
-
     @EventListener
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.wrap(event.getMessage());
-        String userId = (String) headers.getSessionAttributes().get("userId");
+        String userId = null;
+        if(headers.getSessionAttributes() != null) {
+            userId = (String) headers.getSessionAttributes().get("userId");
+        }
+
         if (userId != null) {
             System.out.println("User Disconnected: " + userId);
             userStatusService.saveUserOffline(userId);

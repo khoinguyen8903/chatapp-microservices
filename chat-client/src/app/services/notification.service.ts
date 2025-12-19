@@ -47,10 +47,11 @@ export class NotificationService {
       
       // [FIX 3] Backend Java gửi: putData("title", senderName) -> Đây chính là tên người gửi
       // Backend Java gửi: putData("body", messageContent)
-      const title = payload.data?.['title'] || 'Tin nhắn mới';
+      // [MỚI] Ưu tiên sử dụng senderName từ data, fallback về title, cuối cùng là "Người lạ"
+      const senderName = payload.data?.['senderName'] || payload.data?.['title'] || 'Người lạ';
       const body = payload.data?.['body'] || 'Bạn có tin nhắn mới';
       
-      alert(`🔔 ${title}: ${body}`);
+      alert(`🔔 ${senderName}: ${body}`);
     });
   }
 

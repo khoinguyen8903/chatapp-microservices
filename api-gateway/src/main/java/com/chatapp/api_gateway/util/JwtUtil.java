@@ -49,6 +49,31 @@ public class JwtUtil {
         return extractClaim(token, Claims::getSubject);
     }
 
+    /**
+     * Extracts the username (full name) from the JWT token.
+     * This is used to pass the user's name to downstream services via X-User-Name header.
+     * Tries multiple claim names for compatibility with different JWT issuers (Firebase, OIDC, custom).
+     */
+    public String extractUsername(String token) {
+        Claims claims = extractAllClaims(token);
+        
+        // Try multiple claim names in order of preference
+        String[] claimNames = {"fullName", "name", "username", "preferred_username", "nickname"};
+        
+        for (String claimName : claimNames) {
+            String value = claims.get(claimName, String.class);
+            if (value != null && !value.trim().isEmpty()) {
+                log.info("🔍 [JWT] Extracted username from claim '{}': {}", claimName, value);
+                return value;
+            }
+        }
+        
+        // Last resort: return subject (user ID)
+        String subject = claims.getSubject();
+        log.warn("⚠️ [JWT] No name claims found in token, falling back to subject: {}", subject);
+        return subject;
+    }
+
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);

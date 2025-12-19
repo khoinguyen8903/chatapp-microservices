@@ -17,6 +17,7 @@ public class ChatNotification {
     private String recipientId;
     private String content;
     private MessageStatus status;
+    private String senderName;
 
     // --- [THÊM MỚI] ---
     private MessageType type;

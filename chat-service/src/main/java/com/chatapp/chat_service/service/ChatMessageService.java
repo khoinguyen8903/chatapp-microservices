@@ -1,9 +1,7 @@
 package com.chatapp.chat_service.service;
 
 import com.chatapp.chat_service.client.NotificationClient;
-import com.chatapp.chat_service.client.UserClient; // [QUAN TRỌNG] Dùng Client
 import com.chatapp.chat_service.dto.NotificationRequest;
-import com.chatapp.chat_service.dto.UserDTO; // [QUAN TRỌNG] Dùng DTO
 import com.chatapp.chat_service.enums.MessageStatus;
 import com.chatapp.chat_service.enums.MessageType;
 import com.chatapp.chat_service.model.ChatMessage;
@@ -25,10 +23,7 @@ public class ChatMessageService {
     @Autowired private ChatRoomService chatRoomService;
     @Autowired private NotificationClient notificationClient;
 
-    // [SỬA] Inject UserClient thay vì UserRepository
-    @Autowired private UserClient userClient;
-
-    public ChatMessage save(ChatMessage chatMessage) {
+    public ChatMessage save(ChatMessage chatMessage, String senderName) {
         // 1. Logic tạo Chat ID nếu chưa có
         if (chatMessage.getChatId() == null || chatMessage.getChatId().isEmpty()) {
             var chatId = chatRoomService
@@ -43,7 +38,7 @@ public class ChatMessageService {
         // 3. Gửi thông báo bất đồng bộ (Async)
         CompletableFuture.runAsync(() -> {
             try {
-                handleNotification(chatMessage);
+                handleNotification(chatMessage, senderName);
             } catch (Exception e) {
                 System.err.println(">> Lỗi gửi thông báo: " + e.getMessage());
                 e.printStackTrace();
@@ -53,19 +48,14 @@ public class ChatMessageService {
         return chatMessage;
     }
 
-    private void handleNotification(ChatMessage message) {
-        // A. [FIX TÊN] Lấy USERNAME từ Auth Service
-        String senderName = "Người lạ";
-        try {
-            // Gọi sang Auth Service
-            UserDTO userDto = userClient.getUserById(message.getSenderId());
-
-            // [SỬA LẠI THEO YÊU CẦU] Lấy username thay vì fullName
-            if (userDto != null && userDto.getUsername() != null) {
-                senderName = userDto.getUsername();
-            }
-        } catch (Exception e) {
-            System.out.println("Không lấy được username user: " + message.getSenderId());
+    private void handleNotification(ChatMessage message, String senderName) {
+        // A. [UPDATED] Use actual senderName from Gateway header (passed from controller)
+        // Only fallback to "Người lạ" (Stranger) if senderName is null or empty
+        if (senderName == null || senderName.trim().isEmpty()) {
+            System.out.println("⚠️ [ChatMessageService] senderName is null/empty, using fallback 'Người lạ'");
+            senderName = "Người lạ";
+        } else {
+            System.out.println("✅ [ChatMessageService] Using senderName from Gateway: " + senderName);
         }
 
         // B. [FIX URL] Xử lý nội dung thông báo gọn gàng
@@ -99,6 +89,7 @@ public class ChatMessageService {
                             notificationBody,
                             message.getChatId()
                     );
+                    System.out.println("📤 [ChatMessageService] Sending notification to group member " + memberId + " with senderName: " + senderName);
                     notificationClient.sendNotification(notiReq);
                 }
             }
@@ -110,6 +101,7 @@ public class ChatMessageService {
                     notificationBody,
                     message.getChatId()
             );
+            System.out.println("📤 [ChatMessageService] Sending 1-1 notification to " + message.getRecipientId() + " with senderName: " + senderName);
             notificationClient.sendNotification(notiReq);
         }
     }

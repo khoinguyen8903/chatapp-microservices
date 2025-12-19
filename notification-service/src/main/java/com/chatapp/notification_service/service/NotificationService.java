@@ -17,23 +17,24 @@ public class NotificationService {
 
         if (token != null) {
             try {
-                // [FIX NULL POINTER EXCEPTION]
-                // Firebase .putData() KHÔNG CHẤP NHẬN NULL -> Phải kiểm tra và thay bằng chuỗi rỗng
-                String safeSenderName = (senderName != null) ? senderName : "Tin nhắn mới";
+                // [FIX NULL POINTER EXCEPTION & UPDATED FALLBACK]
+                // Firebase .putData() KHÔNG CHẤP NHẬN NULL -> Phải kiểm tra
+                // Fallback to "Người lạ" (Stranger) for consistency with ChatMessageService
+                String safeSenderName = (senderName != null && !senderName.trim().isEmpty()) ? senderName : "Người lạ";
                 String safeBody = (messageContent != null) ? messageContent : "Bạn có tin nhắn";
                 String safeRoomId = (roomId != null) ? roomId : "";
 
                 Message message = Message.builder()
                         .setToken(token)
                         .putData("type", "chat_msg")
-                        .putData("username", safeSenderName)
-                        .putData("title", safeSenderName)
+                        .putData("username", safeSenderName)  // Actual sender's name
+                        .putData("title", safeSenderName)      // Display sender's name as notification title
                         .putData("body", safeBody)
-                        .putData("roomId", safeRoomId) // Bây giờ safeRoomId không bao giờ null
+                        .putData("roomId", safeRoomId)
                         .build();
 
                 String response = FirebaseMessaging.getInstance().send(message);
-                System.out.println(">> Đã gửi Data-Message tới user " + recipientId + ": " + response);
+                System.out.println(">> Đã gửi Data-Message tới user " + recipientId + " (from: " + safeSenderName + "): " + response);
 
             } catch (FirebaseMessagingException e) {
                 e.printStackTrace();

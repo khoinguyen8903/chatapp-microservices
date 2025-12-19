@@ -8,8 +8,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class NotificationRequest {
-    private String userId;      // ID người nhận
-    private String senderName;  // [ĐỔI TÊN] Thay vì 'title', dùng 'senderName' cho rõ nghĩa
+    private String userId;      // ID người nhận (recipient)
+    private String senderName;  // Tên người gửi - hiển thị trong notification title. Fallback: "Người lạ"
     private String body;        // Nội dung tin nhắn (đã xử lý rút gọn hoặc thay thế icon)
-    private String roomId;      // [THÊM MỚI] ID phòng chat để xử lý logic Frontend
+    private String roomId;      // ID phòng chat để xử lý logic Frontend
 }
