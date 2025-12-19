@@ -39,6 +39,11 @@ export interface ChatRoom {
   groupName?: string;
   adminId?: string;
   memberIds?: string[]; // Backend trả về List<String>
+  
+  // [UNREAD MESSAGE FIELDS] Must match Java ChatRoom
+  lastMessage?: string;           // Preview of the last message
+  lastMessageTimestamp?: Date;    // Timestamp of the last message
+  unreadCount?: number;           // Calculated by backend
 }
 
 export interface ChatSession {
@@ -62,6 +67,11 @@ export interface ChatSession {
   
   // Dành riêng cho Group
   memberCount?: number;  // Số lượng thành viên
+  
+  // Unread message indicators and preview
+  lastMessage?: string;  // Preview of the last message
+  lastMessageTimestamp?: Date;  // Timestamp of the last message
+  unreadCount: number;   // Number of unread messages
 }
 
 // 5. Các interface phụ trợ khác

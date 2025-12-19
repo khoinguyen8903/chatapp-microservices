@@ -61,6 +61,7 @@ public class ChatController {
                                     .senderId(savedMsg.getSenderId())
                                     .senderName(senderName)
                                     .recipientId(room.getChatId())
+                                    .chatId(room.getChatId())  // [CRITICAL] Explicit chatId for group
                                     .content(savedMsg.getContent())
                                     .type(savedMsg.getType())
                                     .status(savedMsg.getStatus())
@@ -69,14 +70,13 @@ public class ChatController {
                 }
             } else {
                 // --- 1-1 CHAT ---
-                Optional<String> chatIdSender = chatRoomService.getChatRoomId(
+                // [FIXED] With unique ChatRoom model, only need to get chatId once
+                // The method internally sorts IDs, so chatId is always the same
+                Optional<String> chatId = chatRoomService.getChatRoomId(
                         chatMessage.getSenderId(), chatMessage.getRecipientId(), true);
 
-                chatRoomService.getChatRoomId(
-                        chatMessage.getRecipientId(), chatMessage.getSenderId(), true);
-
-                if (chatIdSender.isPresent()) {
-                    chatMessage.setChatId(chatIdSender.get());
+                if (chatId.isPresent()) {
+                    chatMessage.setChatId(chatId.get());
                 }
 
                 ChatMessage savedMsg = chatMessageService.save(chatMessage, senderName);
@@ -86,6 +86,7 @@ public class ChatController {
                         .senderId(savedMsg.getSenderId())
                         .senderName(senderName)
                         .recipientId(savedMsg.getRecipientId())
+                        .chatId(savedMsg.getChatId())  // [CRITICAL] Explicit chatId for 1-1
                         .content(savedMsg.getContent())
                         .type(savedMsg.getType())
                         .status(savedMsg.getStatus())
@@ -131,14 +132,23 @@ public class ChatController {
             String statusStr = payload.get("status");
             MessageStatus status = MessageStatus.valueOf(statusStr);
 
-            chatMessageService.updateStatuses(senderId, recipientId, status);
+            System.out.println("📡 [ChatController] WebSocket /status - Sender: " + senderId + 
+                               ", Recipient: " + recipientId + ", Status: " + status);
 
+            List<ChatMessage> updatedMessages = chatMessageService.updateStatuses(senderId, recipientId, status);
+            
+            System.out.println("✅ [ChatController] WebSocket updated " + updatedMessages.size() + " messages");
+
+            // Notify the sender that their messages were seen
             messagingTemplate.convertAndSend("/topic/" + senderId, Map.of(
                     "type", "STATUS_UPDATE",
                     "contactId", recipientId,
                     "status", status
             ));
+            
+            System.out.println("📤 [ChatController] Sent STATUS_UPDATE to /topic/" + senderId);
         } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error in processStatus: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -195,6 +205,105 @@ public class ChatController {
 
     @GetMapping("/rooms/{userId}")
     public ResponseEntity<List<ChatRoom>> getChatRooms(@PathVariable String userId) {
-        return ResponseEntity.ok(chatRoomService.getChatRooms(userId));
+        try {
+            List<ChatRoom> rooms = chatRoomService.getChatRooms(userId);
+            return ResponseEntity.ok(rooms);
+        } catch (Exception e) {
+            // [FIXED] Log error and return empty list instead of 500 error
+            System.err.println("❌ [ChatController] Error loading rooms for user " + userId + ": " + e.getMessage());
+            e.printStackTrace();
+            
+            // Return empty list with 200 status to prevent frontend crash
+            return ResponseEntity.ok(new java.util.ArrayList<>());
+        }
+    }
+
+    /**
+     * [NEW] HTTP REST endpoint for marking messages as read
+     * More reliable than WebSocket-only approach
+     * 
+     * @param senderId - For 1-1 chat: partner's ID; For group: current user's ID
+     * @param recipientId - For 1-1 chat: current user's ID; For group: group ID
+     * @return Updated messages with SEEN status
+     */
+    @PostMapping("/messages/mark-read/{senderId}/{recipientId}")
+    public ResponseEntity<Map<String, Object>> markMessagesAsRead(
+            @PathVariable String senderId,
+            @PathVariable String recipientId) {
+        try {
+            System.out.println("📖 [ChatController] HTTP Mark as Read - Sender: " + senderId + ", Recipient: " + recipientId);
+            
+            // Update message statuses in database
+            List<ChatMessage> updatedMessages = chatMessageService.updateStatuses(
+                    senderId, recipientId, MessageStatus.SEEN);
+            
+            System.out.println("✅ [ChatController] Marked " + updatedMessages.size() + " messages as SEEN");
+            
+            // Send WebSocket notification to the message sender(s) so they see the read status
+            // For 1-1 chat: notify the partner that their messages were read
+            // For group chat: notify all group members (handled by updateStatuses logic)
+            messagingTemplate.convertAndSend("/topic/" + senderId, Map.of(
+                    "type", "STATUS_UPDATE",
+                    "contactId", recipientId,
+                    "status", MessageStatus.SEEN
+            ));
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "updatedCount", updatedMessages.size(),
+                    "message", "Messages marked as read successfully"
+            ));
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error marking messages as read: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * [UTILITY] One-time migration endpoint to fix old messages with null status
+     * This can be called once to fix all existing messages in the database
+     * Should be protected in production (add authentication)
+     */
+    @PostMapping("/messages/fix-null-status")
+    public ResponseEntity<Map<String, Object>> fixNullMessageStatus() {
+        try {
+            System.out.println("🔧 [ChatController] Starting migration to fix null message statuses...");
+            
+            List<ChatMessage> allMessages = chatMessageService.findAll();
+            System.out.println("📊 [ChatController] Found " + allMessages.size() + " total messages");
+            
+            long nullStatusCount = allMessages.stream().filter(msg -> msg.getStatus() == null).count();
+            System.out.println("⚠️ [ChatController] Messages with null status: " + nullStatusCount);
+            
+            if (nullStatusCount > 0) {
+                List<ChatMessage> fixedMessages = chatMessageService.fixMessagesWithNullStatus();
+                System.out.println("✅ [ChatController] Fixed " + fixedMessages.size() + " messages");
+                
+                return ResponseEntity.ok(Map.of(
+                        "success", true,
+                        "totalMessages", allMessages.size(),
+                        "fixedCount", fixedMessages.size(),
+                        "message", "Successfully fixed messages with null status"
+                ));
+            } else {
+                return ResponseEntity.ok(Map.of(
+                        "success", true,
+                        "totalMessages", allMessages.size(),
+                        "fixedCount", 0,
+                        "message", "No messages with null status found"
+                ));
+            }
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error fixing null status: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
     }
 }

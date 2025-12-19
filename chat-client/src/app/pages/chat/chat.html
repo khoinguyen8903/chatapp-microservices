@@ -1,11 +1,39 @@
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<div class="flex h-screen w-screen overflow-hidden bg-gray-100">
-    <div class="w-80 h-full border-r">
-        <app-chat-sidebar></app-chat-sidebar> 
-    </div>
+<!-- Premium Messaging Interface -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <div class="flex-1 h-full min-w-0 bg-white"> 
-        <app-chat-window class="h-full block"></app-chat-window>
-    </div>
-</div>
+<main class="chat-app">
+  <!-- Desktop/Tablet Layout (1024px+) -->
+  <div class="desktop-layout">
+    <!-- Sidebar Navigation (Contact List) -->
+    <nav class="chat-sidebar">
+      <app-chat-sidebar></app-chat-sidebar>
+    </nav>
+
+    <!-- Main Chat Window -->
+    <section class="chat-window">
+      <app-chat-window [onBackToSidebar]="goBackToSidebar.bind(this)"></app-chat-window>
+    </section>
+  </div>
+
+  <!-- Mobile/Tablet Layout (< 1024px) -->
+  <div class="mobile-layout">
+    <!-- Mobile Sidebar View (Contact List) -->
+    <nav
+      class="chat-sidebar-mobile"
+      [class.is-visible]="showSidebar()"
+      [class.is-hidden]="!showSidebar()">
+      <app-chat-sidebar></app-chat-sidebar>
+    </nav>
+
+    <!-- Mobile Chat View -->
+    <section
+      class="chat-window-mobile"
+      [class.is-visible]="!showSidebar()"
+      [class.is-hidden]="showSidebar()">
+      <app-chat-window [onBackToSidebar]="goBackToSidebar.bind(this)"></app-chat-window>
+    </section>
+  </div>
+</main>
+
+<!-- Call Modal (WebRTC) -->
 <app-call-modal></app-call-modal>

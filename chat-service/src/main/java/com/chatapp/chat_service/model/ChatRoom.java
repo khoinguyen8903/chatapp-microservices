@@ -6,7 +6,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.mapping.Document;
+import java.util.Date;
 import java.util.List;
 
 @Data
@@ -30,4 +32,12 @@ public class ChatRoom {
     private String groupName;
     private String adminId;
     private List<String> memberIds;
+    
+    // --- [UNREAD MESSAGE PREVIEW FIELDS] ---
+    private String lastMessage;           // Preview of the last message
+    private Date lastMessageTimestamp;    // Timestamp of the last message
+    
+    // Transient field (not persisted in DB, calculated dynamically)
+    @Transient
+    private int unreadCount;
 }

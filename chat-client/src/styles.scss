@@ -1,13 +1,277 @@
-/* src/style.scss */
+/* =============================================
+   GLOBAL STYLES - Premium Messaging UI
+   Design System: Modern, Clean, Glassmorphism
+   ============================================= */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Thêm đoạn này để đảm bảo app luôn full màn hình */
-html, body {
+/* ===== CSS RESET & BASE ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ===== ROOT STYLES ===== */
+html {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
   height: 100%;
   width: 100%;
   margin: 0;
   padding: 0;
-  overflow: hidden; /* Ẩn thanh cuộn của trình duyệt, chỉ dùng thanh cuộn trong app chat */
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #1f2937;
+  background: #f9fafb;
+}
+
+/* ===== APP ROOT ===== */
+app-root {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+/* ===== TYPOGRAPHY ===== */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ===== LINKS ===== */
+a {
+  color: #6366f1;
+  text-decoration: none;
+  transition: color 0.2s ease;
+
+  &:hover {
+    color: #5850ec;
+  }
+}
+
+/* ===== BUTTONS (GLOBAL DEFAULTS) ===== */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+
+  &:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
+
+/* ===== INPUTS & TEXTAREAS ===== */
+input,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  outline: none;
+  color: inherit;
+
+  &:focus-visible {
+    outline: none;
+  }
+
+  &::placeholder {
+    color: #9ca3af;
+  }
+}
+
+textarea {
+  resize: vertical;
+}
+
+/* ===== CUSTOM SCROLLBAR (GLOBAL) ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.2);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: rgba(99, 102, 241, 0.3);
+  }
+}
+
+/* Firefox Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.2) transparent;
+}
+
+/* ===== SELECTION ===== */
+::selection {
+  background: rgba(99, 102, 241, 0.2);
+  color: #1f2937;
+}
+
+::-moz-selection {
+  background: rgba(99, 102, 241, 0.2);
+  color: #1f2937;
+}
+
+/* ===== FOCUS VISIBLE (ACCESSIBILITY) ===== */
+*:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ===== ANIMATIONS (GLOBAL) ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ===== UTILITY CLASSES ===== */
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glassmorphism {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out;
+}
+
+/* ===== MOBILE OPTIMIZATIONS ===== */
+@media (max-width: 767px) {
+  body {
+    font-size: 15px;
+  }
+
+  /* Prevent zoom on input focus (iOS) */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* ===== PERFORMANCE OPTIMIZATIONS ===== */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Prevent text selection in UI elements */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* ===== LOADING STATES ===== */
+.loading {
+  pointer-events: none;
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* ===== HIDDEN UTILITIES ===== */
+.hidden {
+  display: none !important;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

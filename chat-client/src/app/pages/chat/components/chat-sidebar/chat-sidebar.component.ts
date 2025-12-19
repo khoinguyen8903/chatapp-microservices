@@ -11,7 +11,8 @@ import { CreateGroupModalComponent } from '../create-group-modal/create-group-mo
   standalone: true,
   // [QUAN TRỌNG] Phải import CreateGroupModalComponent vào đây mới dùng được trong HTML
   imports: [CommonModule, FormsModule, CreateGroupModalComponent],
-  templateUrl: './chat-sidebar.component.html'
+  templateUrl: './chat-sidebar.component.html',
+  styleUrls: ['./chat-sidebar.component.scss']
 })
 export class ChatSidebarComponent {
   facade = inject(ChatFacade);

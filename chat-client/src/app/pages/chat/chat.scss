@@ -1,34 +1,238 @@
-/* src/app/pages/chat/chat.scss */
+// =============================================
+// PREMIUM MESSAGING UI - Main Layout Styles
+// Design System: Modern, Glassmorphism, iMessage-inspired
+// Color Palette: Indigo (#6366f1), Soft White (#f9fafb)
+// Typography: Inter (sans-serif)
+// =============================================
 
+// ===== ROOT CONTAINER =====
 :host {
   display: block;
-  width: 100vw;       /* Dùng vw để chắc chắn full chiều ngang viewport */
-  height: 100vh;      /* Dùng vh để chắc chắn full chiều cao viewport */
-  overflow: hidden;   /* Cắt bỏ phần thừa */
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.chat-layout {
-  display: flex;
+// ===== MAIN APP CONTAINER =====
+.chat-app {
   width: 100%;
   height: 100%;
-  background-color: #f0f2f5;
-  overflow: hidden; 
+  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+  position: relative;
+  overflow: hidden;
 }
 
-.sidebar-wrapper {
-  width: 320px;
-  min-width: 320px;   /* Cứng chiều rộng */
+// ===== DESKTOP LAYOUT (>= 1024px) =====
+.desktop-layout {
+  display: none; // Hidden by default (Mobile First)
   height: 100%;
-  border-right: 1px solid #e5e7eb;
-  background-color: #fff;
-  display: flex;      /* Quan trọng: để component con bên trong giãn full */
-  flex-direction: column;
+  width: 100%;
+  
+  @media (min-width: 1024px) {
+    display: flex; // Show on desktop
+    gap: 0;
+  }
+
+  .chat-sidebar {
+    width: 360px;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(99, 102, 241, 0.08);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.03);
+    flex-shrink: 0;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+      box-shadow: 4px 0 32px rgba(0, 0, 0, 0.05);
+    }
+  }
+
+  .chat-window {
+    flex: 1;
+    height: 100%;
+    background: #ffffff;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
 }
 
-.window-wrapper {
-  flex: 1;            /* Chiếm hết phần còn lại */
+// ===== MOBILE/TABLET LAYOUT (< 1024px) =====
+.mobile-layout {
+  display: block; // Visible by default (Mobile First)
+  position: relative;
+  width: 100%;
   height: 100%;
-  min-width: 0;       /* Fix lỗi flexbox bị tràn text */
-  display: flex;      /* Quan trọng */
-  flex-direction: column;
+  overflow: hidden;
+  
+  @media (min-width: 1024px) {
+    display: none; // Hide on desktop
+  }
+
+  .chat-sidebar-mobile,
+  .chat-window-mobile {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #ffffff;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform, opacity;
+  }
+
+  // Sidebar animations (slide from left)
+  .chat-sidebar-mobile {
+    z-index: 10;
+    transform: translateX(0);
+    opacity: 1;
+    
+    &.is-visible {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    &.is-hidden {
+      transform: translateX(-100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
+
+  // Chat window animations (slide from right)
+  .chat-window-mobile {
+    z-index: 20;
+    transform: translateX(100%);
+    opacity: 0;
+    
+    &.is-visible {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    &.is-hidden {
+      transform: translateX(100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
+}
+
+// ===== CUSTOM SCROLLBAR (Global) =====
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.2) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.2);
+    border-radius: 3px;
+    transition: background 0.2s ease;
+
+    &:hover {
+      background: rgba(99, 102, 241, 0.4);
+    }
+  }
+}
+
+// ===== ANIMATIONS =====
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+// ===== FOCUS STATES (Accessibility) =====
+*:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+// ===== UTILITY CLASSES =====
+.glassmorphism {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// ===== RESPONSIVE BREAKPOINTS =====
+// Mobile: < 768px (default)
+// Tablet: 768px - 1023px
+// Desktop: >= 1024px
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .desktop-layout .chat-sidebar {
+    width: 320px; // Slightly narrower on tablets
+  }
 }

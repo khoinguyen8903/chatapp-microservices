@@ -15,6 +15,7 @@ public interface ChatRoomRepository extends MongoRepository<ChatRoom, String> {
     // Tìm phòng (cả nhóm và 1-1) mà user có tham gia
     List<ChatRoom> findByMemberIdsContaining(String memberId);
 
-    // Tìm theo ChatId (để lấy thông tin nhóm khi gửi tin vào group)
+    // [UNIQUE MODEL] Tìm theo ChatId - Returns Optional because each chatId is now unique
+    // With the new model, there's only ONE ChatRoom per chatId (not two)
     Optional<ChatRoom> findByChatId(String chatId);
 }

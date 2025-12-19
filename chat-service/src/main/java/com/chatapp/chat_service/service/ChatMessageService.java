@@ -32,20 +32,60 @@ public class ChatMessageService {
             chatMessage.setChatId(chatId);
         }
 
-        // 2. Lưu tin nhắn
-        repository.save(chatMessage);
+        // [FIX] Ensure message has a valid status before saving
+        if (chatMessage.getStatus() == null) {
+            chatMessage.setStatus(MessageStatus.SENT);
+            System.out.println("⚠️ [ChatMessageService] Message had null status, set to SENT");
+        }
 
-        // 3. Gửi thông báo bất đồng bộ (Async)
+        // 2. Lưu tin nhắn
+        ChatMessage savedMessage = repository.save(chatMessage);
+
+        // 3. [NEW] Update ChatRoom with last message preview
+        updateChatRoomLastMessage(savedMessage);
+
+        // 4. Gửi thông báo bất đồng bộ (Async)
         CompletableFuture.runAsync(() -> {
             try {
-                handleNotification(chatMessage, senderName);
+                handleNotification(savedMessage, senderName);
             } catch (Exception e) {
                 System.err.println(">> Lỗi gửi thông báo: " + e.getMessage());
                 e.printStackTrace();
             }
         });
 
-        return chatMessage;
+        return savedMessage;
+    }
+
+    // [NEW] Update ChatRoom entry with last message information
+    // Now uses the UNIQUE ChatRoom model - single room for both 1-1 and group chats
+    private void updateChatRoomLastMessage(ChatMessage message) {
+        String lastMessagePreview = generateMessagePreview(message);
+        
+        // [FIXED] Use new 3-parameter method that works with unique ChatRoom model
+        // This works for BOTH 1-1 and group chats since each chatId is unique
+        chatRoomService.updateChatRoomLastMessage(
+            message.getChatId(), 
+            lastMessagePreview, 
+            message.getTimestamp()
+        );
+    }
+
+    // [NEW] Generate message preview based on type
+    private String generateMessagePreview(ChatMessage message) {
+        MessageType type = message.getType();
+        
+        if (type == MessageType.TEXT) {
+            return message.getContent();
+        } else if (type == MessageType.IMAGE) {
+            return "📷 Image";
+        } else if (type == MessageType.VIDEO) {
+            return "🎥 Video";
+        } else if (type == MessageType.FILE) {
+            return "📎 " + (message.getContent() != null ? message.getContent() : "File");
+        }
+        
+        return message.getContent();
     }
 
     private void handleNotification(ChatMessage message, String senderName) {
@@ -110,12 +150,34 @@ public class ChatMessageService {
 
     public List<ChatMessage> findChatMessages(String senderId, String recipientId) {
         var groupRoom = chatRoomService.findByChatId(recipientId);
+        List<ChatMessage> messages;
+        
         if (groupRoom.isPresent() && groupRoom.get().isGroup()) {
-            return repository.findByChatId(recipientId);
+            messages = repository.findByChatId(recipientId);
         } else {
             var chatId = chatRoomService.getChatRoomId(senderId, recipientId, false);
-            return chatId.map(repository::findByChatId).orElse(new ArrayList<>());
+            messages = chatId.map(repository::findByChatId).orElse(new ArrayList<>());
         }
+        
+        // [FIX] Ensure all messages have a valid status (fix old messages with null status)
+        boolean hasNullStatus = messages.stream().anyMatch(msg -> msg.getStatus() == null);
+        if (hasNullStatus) {
+            System.out.println("⚠️ [ChatMessageService] Found messages with null status, fixing...");
+            List<ChatMessage> fixedMessages = messages.stream()
+                .peek(msg -> {
+                    if (msg.getStatus() == null) {
+                        // Default old messages to SEEN to avoid false unread counts
+                        msg.setStatus(MessageStatus.SEEN);
+                        System.out.println("  🔧 Fixed message ID: " + msg.getId() + " - set status to SEEN");
+                    }
+                })
+                .collect(Collectors.toList());
+            repository.saveAll(fixedMessages);
+            System.out.println("✅ [ChatMessageService] Fixed all messages with null status");
+            return fixedMessages;
+        }
+        
+        return messages;
     }
 
     public ChatMessage findById(String id) {
@@ -129,18 +191,120 @@ public class ChatMessageService {
         });
     }
 
+    /**
+     * [UTILITY] Get all messages (for migration purposes)
+     */
+    public List<ChatMessage> findAll() {
+        return repository.findAll();
+    }
+
+    /**
+     * [UTILITY] Fix all messages with null status by setting them to SEEN
+     * This prevents old messages from being incorrectly counted as unread
+     */
+    public List<ChatMessage> fixMessagesWithNullStatus() {
+        System.out.println("🔧 [ChatMessageService] Fixing messages with null status...");
+        
+        List<ChatMessage> allMessages = repository.findAll();
+        List<ChatMessage> messagesToFix = allMessages.stream()
+            .filter(msg -> msg.getStatus() == null)
+            .peek(msg -> {
+                // Set old messages to SEEN to avoid false unread counts
+                msg.setStatus(MessageStatus.SEEN);
+                System.out.println("  🔄 Fixed message ID: " + msg.getId() + " - set status to SEEN");
+            })
+            .collect(Collectors.toList());
+        
+        if (!messagesToFix.isEmpty()) {
+            repository.saveAll(messagesToFix);
+            System.out.println("✅ [ChatMessageService] Fixed " + messagesToFix.size() + " messages");
+        }
+        
+        return messagesToFix;
+    }
+
     public List<ChatMessage> updateStatuses(String senderId, String recipientId, MessageStatus status) {
-        var chatId = chatRoomService.getChatRoomId(senderId, recipientId, false);
-        if (chatId.isEmpty()) return new ArrayList<>();
+        System.out.println("📝 [ChatMessageService] updateStatuses called - Sender: " + senderId + 
+                           ", Recipient: " + recipientId + ", Status: " + status);
+        
+        // Check if recipientId is a group chatId
+        Optional<ChatRoom> groupRoom = chatRoomService.findByChatId(recipientId);
+        
+        String chatId;
+        boolean isGroup = false;
+        
+        if (groupRoom.isPresent() && groupRoom.get().isGroup()) {
+            // For GROUP chat: recipientId is the chatId
+            chatId = recipientId;
+            isGroup = true;
+            System.out.println("📊 [ChatMessageService] GROUP chat detected - ChatId: " + chatId);
+        } else {
+            // For 1-1 chat: get chatId from senderId and recipientId
+            var chatIdOpt = chatRoomService.getChatRoomId(senderId, recipientId, false);
+            if (chatIdOpt.isEmpty()) {
+                System.out.println("⚠️ [ChatMessageService] ChatId not found for Sender: " + senderId + 
+                                   ", Recipient: " + recipientId);
+                return new ArrayList<>();
+            }
+            chatId = chatIdOpt.get();
+            System.out.println("👤 [ChatMessageService] 1-1 chat detected - ChatId: " + chatId);
+        }
 
-        List<ChatMessage> messages = repository.findByChatId(chatId.get());
-        List<ChatMessage> messagesToUpdate = messages.stream()
-                .filter(msg -> msg.getSenderId().equals(senderId))
-                .filter(msg -> msg.getStatus() != status)
-                .peek(msg -> msg.setStatus(status))
-                .collect(Collectors.toList());
+        List<ChatMessage> messages = repository.findByChatId(chatId);
+        System.out.println("📨 [ChatMessageService] Found " + messages.size() + " total messages in chat");
+        
+        // [DEBUG] Log status distribution before update
+        long sentCount = messages.stream().filter(m -> m.getStatus() == MessageStatus.SENT).count();
+        long deliveredCount = messages.stream().filter(m -> m.getStatus() == MessageStatus.DELIVERED).count();
+        long seenCount = messages.stream().filter(m -> m.getStatus() == MessageStatus.SEEN).count();
+        long nullCount = messages.stream().filter(m -> m.getStatus() == null).count();
+        System.out.println("📊 [ChatMessageService] Status distribution - SENT: " + sentCount + 
+                           ", DELIVERED: " + deliveredCount + ", SEEN: " + seenCount + ", NULL: " + nullCount);
+        
+        List<ChatMessage> messagesToUpdate;
+        
+        if (isGroup) {
+            // For GROUP: Mark all messages NOT sent by the current user (senderId) as SEEN
+            messagesToUpdate = messages.stream()
+                    .filter(msg -> !msg.getSenderId().equals(senderId))
+                    .filter(msg -> msg.getStatus() != status)
+                    .peek(msg -> {
+                        System.out.println("  🔄 Updating message ID: " + msg.getId() + " from " + msg.getStatus() + " to " + status);
+                        msg.setStatus(status);
+                    })
+                    .collect(Collectors.toList());
+            System.out.println("👥 [ChatMessageService] GROUP: Marking messages NOT from " + senderId);
+        } else {
+            // For 1-1: Mark messages sent by the other person (senderId in payload) as SEEN
+            messagesToUpdate = messages.stream()
+                    .filter(msg -> msg.getSenderId().equals(senderId))
+                    .filter(msg -> msg.getStatus() != status)
+                    .peek(msg -> {
+                        System.out.println("  🔄 Updating message ID: " + msg.getId() + " from " + msg.getStatus() + " to " + status);
+                        msg.setStatus(status);
+                    })
+                    .collect(Collectors.toList());
+            System.out.println("💬 [ChatMessageService] 1-1: Marking messages FROM " + senderId);
+        }
 
-        if (!messagesToUpdate.isEmpty()) repository.saveAll(messagesToUpdate);
+        System.out.println("✍️ [ChatMessageService] Updating " + messagesToUpdate.size() + " messages to " + status);
+        
+        if (!messagesToUpdate.isEmpty()) {
+            // Save all updated messages to database
+            List<ChatMessage> savedMessages = repository.saveAll(messagesToUpdate);
+            System.out.println("✅ [ChatMessageService] Successfully saved " + savedMessages.size() + 
+                               " messages with status " + status);
+            
+            // [VERIFICATION] Re-query to verify persistence
+            List<ChatMessage> verifyMessages = repository.findByChatId(chatId);
+            long verifySeenCount = verifyMessages.stream().filter(m -> m.getStatus() == MessageStatus.SEEN).count();
+            System.out.println("🔍 [ChatMessageService] Verification - SEEN messages after update: " + verifySeenCount);
+            
+            return savedMessages;
+        } else {
+            System.out.println("ℹ️ [ChatMessageService] No messages to update (all already " + status + ")");
+        }
+        
         return messagesToUpdate;
     }
 }

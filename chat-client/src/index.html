@@ -2,20 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>ChatClient</title>
+  <title>Messages - Premium Chat</title>
   <base href="/">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="description" content="Premium messaging experience with modern UI/UX">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
 
-  <!-- --- QUAN TRỌNG: SỬA LỖI "global is not defined" --- -->
-  <!-- Script này phải đặt trước các script khác để SockJS hoạt động -->
+  <!-- Fix for SockJS (WebSocket) -->
   <script>
     window.global = window;
   </script>
-  <!-- --------------------------------------------------- -->
 
-  <!-- Thêm Font Awesome để hiển thị các icon (kính lúp, máy bay giấy,...) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Premium Typography: Inter Font Family -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer">
 </head>
 <body>
   <app-root></app-root>

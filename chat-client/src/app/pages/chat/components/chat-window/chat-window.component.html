@@ -1,212 +1,263 @@
-<div class="flex flex-col h-full w-full bg-[#F2F4F7] relative font-['Plus_Jakarta_Sans',sans-serif]">
+<!-- Premium Chat Window Container -->
+<div class="chat-window-container">
 
-  <div class="h-[76px] bg-white/80 backdrop-blur-xl border-b border-white/50 flex items-center px-6 justify-between shadow-[0_4px_15px_rgba(0,0,0,0.02)] z-30 shrink-0 sticky top-0">
-    
+  <!-- Enhanced Chat Header with Glassmorphism -->
+  <header class="chat-header">
     @if (facade.selectedSession(); as session) {
-      <div class="flex items-center animate-fade-in gap-4">
-        <div class="relative group cursor-pointer">
-            <div class="w-[46px] h-[46px] rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg ring-[3px] ring-white transition-transform duration-300 group-hover:scale-105"
-                 [ngClass]="session.type === 'GROUP' 
-                    ? 'bg-gradient-to-br from-orange-400 to-red-500 shadow-orange-200' 
-                    : 'bg-gradient-to-tr from-[#6366f1] to-[#a855f7] shadow-indigo-200'">
-               
-               @if (session.type === 'GROUP') {
-                   <i class="fas fa-users text-lg"></i>
-               } @else {
-                   {{ (session.name || '?').charAt(0) | uppercase }}
-               }
+      <div class="header-wrapper">
+        <!-- Mobile Back Button -->
+        <button
+          (click)="onBackToSidebar?.()"
+          class="back-button"
+          aria-label="Back to conversations">
+          <i class="fas fa-arrow-left"></i>
+        </button>
+
+        <!-- User/Group Info -->
+        <div class="header-profile animate-fade-in">
+          <div class="profile-avatar-wrapper">
+            <div 
+              class="profile-avatar"
+              [class.group-avatar]="session.type === 'GROUP'"
+              [class.private-avatar]="session.type === 'PRIVATE'">
+              
+              @if (session.type === 'GROUP') {
+                <i class="fas fa-users"></i>
+              } @else {
+                <span class="avatar-text">{{ (session.name || '?').charAt(0) | uppercase }}</span>
+              }
             </div>
-            
+
             @if (session.type === 'PRIVATE') {
-                <span class="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 border-[2.5px] border-white rounded-full box-content shadow-sm"
-                      [class.bg-emerald-500]="facade.partnerStatus() === 'ONLINE'"
-                      [class.bg-slate-300]="facade.partnerStatus() === 'OFFLINE'">
-                </span>
+              <span 
+                class="status-indicator"
+                [class.online]="facade.partnerStatus() === 'ONLINE'"
+                [class.offline]="facade.partnerStatus() === 'OFFLINE'"
+                [title]="facade.partnerStatus() === 'ONLINE' ? 'Online' : 'Offline'">
+              </span>
             }
-        </div>
-        
-        <div class="flex flex-col justify-center">
-            <h2 class="font-bold text-slate-800 text-[16px] tracking-tight leading-tight">
-                {{ session.name }}
+          </div>
+
+          <div class="profile-info">
+            <h2 class="profile-name text-truncate">
+              {{ session.name }}
             </h2>
-            
-            <span class="text-[13px] font-medium mt-0.5 transition-colors duration-300 flex items-center gap-1.5"
-                  [class.text-emerald-600]="facade.partnerStatus() === 'ONLINE' && session.type === 'PRIVATE'"
-                  [class.text-slate-500]="session.type === 'GROUP' || facade.partnerStatus() === 'OFFLINE'">
-                
-                @if (session.type === 'GROUP') {
-                    <i class="fas fa-user-friends text-[10px]"></i>
-                    {{ session.memberCount || 0 }} thành viên
-                } 
-                @else {
-                    @if(facade.partnerStatus() === 'ONLINE') {
-                        <span class="relative flex h-2 w-2">
-                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                    }
-                    {{ facade.lastSeen() | lastSeen:facade.partnerStatus() }}
+
+            <div class="profile-status">
+              @if (session.type === 'GROUP') {
+                <i class="fas fa-user-friends"></i>
+                <span>{{ session.memberCount || 0 }} members</span>
+              } @else {
+                @if (facade.partnerStatus() === 'ONLINE') {
+                  <span class="online-pulse"></span>
+                  <span class="status-text">Active now</span>
+                } @else {
+                  <span class="status-text">{{ facade.lastSeen() | lastSeen:facade.partnerStatus() }}</span>
                 }
-            </span>
+              }
+            </div>
+          </div>
         </div>
-      </div>
-      
-      <div class="flex items-center gap-2">
-        <button (click)="facade.startVoiceCall()" 
-                class="w-10 h-10 rounded-full hover:bg-slate-100/80 flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-all active:scale-95"
-                title="Gọi Thoại">
-            <i class="fas fa-phone-alt text-lg"></i>
-        </button>
-        <button (click)="facade.startVideoCall()" 
-                class="w-10 h-10 rounded-full hover:bg-slate-100/80 flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-all active:scale-95"
-                title="Gọi Video">
-            <i class="fas fa-video text-lg"></i>
-        </button>
-        <button class="w-10 h-10 rounded-full hover:bg-slate-100/80 flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-all active:scale-95">
-            <i class="fas fa-ellipsis-v text-lg"></i>
-        </button>
+
+        <!-- Header Actions -->
+        <div class="header-actions">
+          <button 
+            (click)="facade.startVoiceCall()"
+            class="action-button"
+            title="Voice Call"
+            aria-label="Start voice call">
+            <i class="fas fa-phone-alt"></i>
+          </button>
+          
+          <button 
+            (click)="facade.startVideoCall()"
+            class="action-button"
+            title="Video Call"
+            aria-label="Start video call">
+            <i class="fas fa-video"></i>
+          </button>
+          
+          <button 
+            class="action-button"
+            title="More Options"
+            aria-label="More options">
+            <i class="fas fa-ellipsis-v"></i>
+          </button>
+        </div>
       </div>
 
     } @else {
-      <div class="flex items-center text-slate-400 font-medium bg-slate-100/50 px-4 py-1.5 rounded-full text-sm backdrop-blur-sm">
-          <span class="w-2 h-2 bg-slate-400 rounded-full mr-2"></span>
-          Chưa chọn hội thoại
+      <!-- No Chat Selected State -->
+      <div class="no-chat-selected">
+        <span class="status-dot"></span>
+        <span class="status-text">No conversation selected</span>
       </div>
     }
-  </div>
+  </header>
 
-  <div id="chat-container" class="flex-1 overflow-y-auto min-h-0 p-4 md:p-6 space-y-6 custom-scrollbar scroll-smooth" #scrollContainer>
+  <!-- Messages Area with Premium Styling -->
+  <section 
+    id="chat-container" 
+    class="messages-area custom-scrollbar" 
+    #scrollContainer
+    role="log"
+    aria-live="polite"
+    aria-label="Chat messages">
+    
     @if (!facade.selectedSession()) {
-        <div class="h-full flex flex-col items-center justify-center animate-fade-in select-none opacity-80">
-            <div class="w-28 h-28 bg-white rounded-3xl flex items-center justify-center mb-6 shadow-[0_10px_40px_rgba(0,0,0,0.05)] rotate-3 hover:rotate-6 transition-transform duration-500">
-                <i class="fas fa-paper-plane text-5xl text-indigo-500 transform -rotate-12 translate-x-1 translate-y-1"></i>
-            </div>
-            <p class="text-2xl font-bold text-slate-700 tracking-tight">Xin chào!</p>
-            <p class="text-slate-400 mt-2 font-medium">Chọn một người bạn hoặc nhóm để bắt đầu.</p>
+      <!-- Welcome Screen (No Chat Selected) -->
+      <div class="welcome-screen animate-fade-in">
+        <div class="welcome-icon">
+          <i class="fas fa-paper-plane"></i>
         </div>
+        <h3 class="welcome-title">Welcome to Messages!</h3>
+        <p class="welcome-subtitle">Select a conversation to start chatting</p>
+      </div>
     }
 
-    <div class="flex flex-col w-full px-2"> 
+    <!-- Message List -->
+    <div class="message-list">
       @for (msg of facade.messages(); track $index) {
-        <div class="flex w-full group animate-slide-up mb-6" [ngClass]="{'justify-end': msg.senderId === facade.currentUser().id}">
+        <article 
+          class="message-wrapper"
+          [class.sent]="msg.senderId === facade.currentUser().id"
+          [class.received]="msg.senderId !== facade.currentUser().id">
           
-          <div class="flex flex-col max-w-[85%] md:max-w-[75%]" 
-               [ngClass]="{'items-end': msg.senderId === facade.currentUser().id, 'items-start': msg.senderId !== facade.currentUser().id}">
-               
-              @if (facade.selectedSession()?.type === 'GROUP' && msg.senderId !== facade.currentUser().id) {
-                  <span class="text-[11px] text-slate-500 font-bold mb-1 ml-1 block">
-                      {{ msg.senderName || 'Thành viên' }}
-                  </span>
-              }
-
-              <div class="px-5 py-3.5 text-[15px] leading-relaxed relative transition-all duration-200 shadow-sm hover:shadow-md"
-                  [ngClass]="msg.senderId === facade.currentUser().id 
-                      ? 'bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] text-white rounded-[22px] rounded-tr-sm' 
-                      : 'bg-white text-slate-700 rounded-[22px] rounded-tl-sm border border-slate-100'">
-              
-              @if (msg.type === MessageType.IMAGE) {
-                  <div class="rounded-xl overflow-hidden cursor-pointer mt-1 mb-1 shadow-sm">
-                      <img [src]="FileHelper.sanitizeUrl(msg.content)" alt="Image" class="max-w-full max-h-[450px] object-cover hover:scale-[1.01] transition-transform duration-500 ease-out">
-                  </div>
-              } 
-              @else if (msg.type === MessageType.VIDEO) {
-                  <div class="rounded-xl overflow-hidden bg-black min-w-[250px] shadow-sm">
-                    <video controls class="max-w-full max-h-[450px] w-full">
-                        <source [src]="FileHelper.sanitizeUrl(msg.content)">
-                    </video>
-                   </div>
-              }
-              @else if (msg.type === MessageType.FILE) {
-    <a [href]="FileHelper.sanitizeUrl(msg.content)" target="_blank" 
-       class="flex items-center gap-3.5 p-3.5 rounded-xl transition-all cursor-pointer text-decoration-none border"
-       [ngClass]="msg.senderId === facade.currentUser().id 
-          ? 'bg-white/10 hover:bg-white/20 border-white/10 text-white' 
-          : 'bg-slate-50 hover:bg-slate-100 border-slate-100 text-slate-700'">
-       
-       <div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-sm"
-            [ngClass]="msg.senderId === facade.currentUser().id ? 'bg-white/20' : 'bg-white text-indigo-500'">
-           <i class="fas fa-file-lines text-lg"></i>
-       </div>
-       
-       <div class="flex-1 overflow-hidden text-left min-w-0">
-           
-           <p class="text-sm font-bold break-all whitespace-normal leading-tight">
-               {{ msg.fileName || FileHelper.getFileName(msg.content) }}
-           </p>
-
-           <span class="text-[11px] opacity-80 uppercase tracking-wider font-semibold mt-1 block">
-               Tải xuống
-           </span>
-       </div>
-    </a>
-}
-              @else {
-                    <p class="block tracking-wide" 
-       style="white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere;">
-        {{ msg.content }}
-    </p>
-              }
-              </div>
-
-              <span class="text-[11px] mt-1.5 px-2 font-semibold text-slate-400 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
-                  {{ msg.timestamp | date:'HH:mm' }}
-                  @if(msg.senderId === facade.currentUser().id) {
-                      @if (msg.status === MessageStatus.SEEN) {
-                          <i class="fas fa-check-circle ml-1 text-indigo-500 text-[10px]" title="Đã xem"></i>
-                      } @else if (msg.status === MessageStatus.DELIVERED) {
-                          <i class="fas fa-check-circle ml-1 text-slate-400 text-[10px]" title="Đã nhận"></i>
-                      } @else {
-                          <i class="far fa-check-circle ml-1 text-slate-300 text-[10px]" title="Đã gửi"></i>
-                      }
-                  }
+          <div class="message-content-wrapper">
+            <!-- Group sender name -->
+            @if (facade.selectedSession()?.type === 'GROUP' && msg.senderId !== facade.currentUser().id) {
+              <span class="sender-name">
+                {{ msg.senderName || 'Member' }}
               </span>
+            }
+
+            <!-- Message Bubble with Glassmorphism -->
+            <div 
+              class="message-bubble"
+              [class.bubble-sent]="msg.senderId === facade.currentUser().id"
+              [class.bubble-received]="msg.senderId !== facade.currentUser().id">
+              
+              <!-- Image Message -->
+              @if (msg.type === MessageType.IMAGE) {
+                <div class="attachment-image">
+                  <img 
+                    [src]="FileHelper.sanitizeUrl(msg.content)" 
+                    alt="Shared image"
+                    loading="lazy">
+                </div>
+              }
+              
+              <!-- Video Message -->
+              @else if (msg.type === MessageType.VIDEO) {
+                <div class="attachment-video">
+                  <video controls>
+                    <source [src]="FileHelper.sanitizeUrl(msg.content)">
+                  </video>
+                </div>
+              }
+              
+              <!-- File Message -->
+              @else if (msg.type === MessageType.FILE) {
+                <a 
+                  [href]="FileHelper.sanitizeUrl(msg.content)" 
+                  target="_blank" 
+                  class="attachment-file"
+                  [class.file-sent]="msg.senderId === facade.currentUser().id"
+                  [class.file-received]="msg.senderId !== facade.currentUser().id">
+                  
+                  <div class="file-icon">
+                    <i class="fas fa-file-lines"></i>
+                  </div>
+                  
+                  <div class="file-details">
+                    <p class="file-name text-truncate">
+                      {{ msg.fileName || FileHelper.getFileName(msg.content) }}
+                    </p>
+                    <span class="file-action">Download</span>
+                  </div>
+                </a>
+              }
+              
+              <!-- Text Message -->
+              @else {
+                <p class="message-text">{{ msg.content }}</p>
+              }
+            </div>
+
+            <!-- Message Metadata (Timestamp + Status) -->
+            <div class="message-meta">
+              <span class="message-time">{{ msg.timestamp | date:'HH:mm' }}</span>
+              
+              @if (msg.senderId === facade.currentUser().id) {
+                @if (msg.status === MessageStatus.SEEN) {
+                  <i class="fas fa-check-double status-icon seen" title="Seen"></i>
+                } @else if (msg.status === MessageStatus.DELIVERED) {
+                  <i class="fas fa-check-double status-icon delivered" title="Delivered"></i>
+                } @else {
+                  <i class="fas fa-check status-icon sent" title="Sent"></i>
+                }
+              }
+            </div>
+          </div>
+        </article>
+      }
+
+      <!-- Typing Indicator -->
+      @if (facade.isRecipientTyping()) {
+        <div class="typing-indicator-wrapper animate-slide-up">
+          <div class="typing-bubble">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
           </div>
         </div>
       }
     </div>
-    
-    @if (facade.isRecipientTyping()) {
-        <div class="flex w-full px-2 animate-slide-up mt-2">
-            <div class="bg-white px-4 py-3.5 rounded-[20px] rounded-tl-sm flex items-center gap-1.5 shadow-sm border border-slate-100 w-fit">
-               <div class="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></div>
-               <div class="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-75"></div>
-               <div class="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-150"></div>
-            </div>
-        </div>
-    }
-  </div>
+  </section>
 
-  <div class="p-5 pb-6 bg-[#F2F4F7] shrink-0 z-20">
-    <div class="flex gap-2 items-end w-full bg-white p-2.5 rounded-[26px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 focus-within:shadow-[0_8px_30px_rgba(99,102,241,0.15)] focus-within:border-indigo-200 transition-all duration-300">
-      
-      <div class="relative flex items-center pl-1">
-           <input type="file" #fileInput (change)="onFileSelected($event)" class="hidden">
-           
-           <button (click)="fileInput.click()" [disabled]="!facade.selectedSession()"
-              class="w-11 h-11 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all duration-200 active:scale-90"
-              title="Gửi file">
-              <i class="fas fa-paperclip text-xl transform rotate-45"></i>
-           </button>
-      </div>
+  <!-- Premium Message Input Area -->
+  <footer class="message-input-area">
+    <div class="input-wrapper">
+      <!-- Hidden File Input -->
+      <input 
+        type="file" 
+        #fileInput 
+        (change)="onFileSelected($event)" 
+        class="file-input-hidden"
+        aria-label="Upload file">
 
-      <textarea 
-          [(ngModel)]="newMessage" 
-          (keyup.enter)="sendMessage()"
-          (input)="onInputTyping()" 
-          placeholder="Nhập tin nhắn..." 
-          rows="1"
-          class="flex-1 bg-transparent border-none focus:ring-0 text-slate-700 placeholder-slate-400 py-3 resize-none max-h-32 custom-scrollbar outline-none text-[15px] font-medium leading-relaxed"
-          [disabled]="!facade.selectedSession()"
-          style="min-height: 48px;"
-      ></textarea>
-      
-      <button 
-        (click)="sendMessage()" 
+      <!-- Attachment Button -->
+      <button
+        (click)="fileInput.click()"
+        [disabled]="!facade.selectedSession()"
+        class="attachment-button"
+        title="Attach file"
+        aria-label="Attach file">
+        <i class="fas fa-paperclip"></i>
+      </button>
+
+      <!-- Message Textarea -->
+      <textarea
+        [(ngModel)]="newMessage"
+        (keyup.enter)="sendMessage()"
+        (input)="onInputTyping()"
+        placeholder="Type a message..."
+        rows="1"
+        class="message-input"
+        [disabled]="!facade.selectedSession()"
+        aria-label="Message input">
+      </textarea>
+
+      <!-- Send Button -->
+      <button
+        (click)="sendMessage()"
         [disabled]="!newMessage.trim() || !facade.selectedSession()"
-        class="w-11 h-11 flex items-center justify-center bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-full transition-all duration-300 shadow-md shadow-indigo-200 disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed hover:scale-105 active:scale-95 mb-0.5">
-        <i class="fas fa-paper-plane text-sm ml-0.5"></i>
+        class="send-button"
+        title="Send message"
+        aria-label="Send message">
+        <i class="fas fa-paper-plane"></i>
       </button>
     </div>
-  </div>
+  </footer>
 
 </div>

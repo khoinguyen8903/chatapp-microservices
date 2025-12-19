@@ -93,6 +93,7 @@ export class ChatService {
           
           const chatMessage: ChatMessage = {
               id: payload.id,
+              chatId: payload.chatId,  // [CRITICAL] Explicit chatId from backend
               senderId: payload.senderId,
               recipientId: payload.recipientId, 
               content: payload.content,
@@ -189,6 +190,11 @@ export class ChatService {
 
   getChatRooms(userId: string): Observable<ChatRoom[]> {
     return this.http.get<ChatRoom[]>(`${this.apiUrl}/rooms/${userId}`);
+  }
+
+  // [NEW] HTTP endpoint for marking messages as read (more reliable than WebSocket only)
+  markAsReadHTTP(senderId: string, recipientId: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/messages/mark-read/${senderId}/${recipientId}`, {});
   }
 
   onMessage(): Observable<ChatMessage> { return this.messageSubject.asObservable(); }

@@ -1,24 +1,26 @@
-import { Component, inject, ElementRef, ViewChild, effect, OnDestroy } from '@angular/core';
+import { Component, inject, ElementRef, ViewChild, effect, OnDestroy, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ChatFacade } from '../../chat.facade';
 import { LastSeenPipe } from '../../pipes/last-seen.pipe';
 import { FileHelper } from '../../utils/file.helper';
-import { MessageType, MessageStatus } from '../../../../models/chat.models'; 
-// [MỚI] Import NotificationService
+import { MessageType, MessageStatus } from '../../../../models/chat.models';
 import { NotificationService } from '../../../../services/notification.service';
 
 @Component({
   selector: 'app-chat-window',
   standalone: true,
   imports: [CommonModule, FormsModule, LastSeenPipe],
-  templateUrl: './chat-window.component.html'
+  templateUrl: './chat-window.component.html',
+  styleUrls: ['./chat-window.component.scss']
 })
-export class ChatWindowComponent implements OnDestroy { // [MỚI] Implement OnDestroy
+export class ChatWindowComponent implements OnDestroy {
   public facade = inject(ChatFacade);
-  
-  // [MỚI] Inject Notification Service
+
   private notificationService = inject(NotificationService);
+
+  // Mobile back button handler
+  @Input() onBackToSidebar?: () => void;
 
   newMessage = '';
   

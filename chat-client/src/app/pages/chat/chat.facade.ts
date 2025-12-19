@@ -81,31 +81,91 @@ export class ChatFacade {
     const msgSub = this.chatService.onMessage().subscribe((msg) => {
       if (!msg) return;
       const currentSession = this.selectedSession();
+      const currentUserId = this.currentUser().id;
       
-      // [LOGIC MỚI] Kiểm tra xem tin nhắn có thuộc session đang mở không
-      let isBelongToCurrentSession = false;
-
-      if (currentSession) {
-        if (currentSession.type === 'GROUP') {
-            // Với Group: Check xem recipientId của tin nhắn có khớp với ID nhóm không
-            isBelongToCurrentSession = msg.recipientId === currentSession.id;
+      console.log('📬 [Facade] Received message - From:', msg.senderId, 'To:', msg.recipientId, 
+                  'ChatId:', msg.chatId, 'Type:', msg.type, 'CurrentSession:', currentSession?.name);
+      
+      // [CRITICAL FIX] Use explicit chatId from backend for room-specific updates
+      // This prevents unread count leakage across different conversations
+      let chatId: string;
+      
+      if (msg.chatId) {
+        // Backend provided explicit chatId - use it directly (most reliable)
+        chatId = msg.chatId;
+        console.log('✅ [Facade] Using explicit chatId from backend:', chatId);
+      } else {
+        // Fallback: Derive chatId from message (for backward compatibility)
+        console.warn('⚠️ [Facade] No explicit chatId from backend, deriving from message...');
+        
+        // Check if this is a group message by looking up in rawRooms
+        const possibleGroupRoom = this.rawRooms().find(room => 
+          room.isGroup && room.chatId === msg.recipientId
+        );
+        
+        if (possibleGroupRoom) {
+          // GROUP MESSAGE: chatId is always the group's ID (recipientId)
+          chatId = msg.recipientId;
+          console.log('👥 [Facade] GROUP message detected - ChatId:', chatId);
         } else {
-            // Với Private: Check xem người gửi có phải là partner đang chat không
-            // Hoặc mình gửi (để hiện tin nhắn của chính mình vừa gửi socket)
-            isBelongToCurrentSession = msg.senderId === currentSession.id || msg.senderId === this.currentUser().id;
+          // PRIVATE MESSAGE: chatId is the partner's ID (the other person, not me)
+          if (msg.senderId === currentUserId) {
+            // I sent this message → chatId is the recipient (my partner)
+            chatId = msg.recipientId;
+          } else {
+            // Someone sent me this message → chatId is the sender (my partner)
+            chatId = msg.senderId;
+          }
+          console.log('💬 [Facade] PRIVATE message detected - ChatId:', chatId, 
+                      '(Partner ID, not mine)');
         }
       }
+      
+      // Determine the session ID to match against
+      // For PRIVATE chats: session.id is the partner's ID
+      // For GROUP chats: session.id is the group's chatId
+      let sessionIdToMatch: string | null = null;
+      if (currentSession) {
+        if (currentSession.type === 'GROUP') {
+          // For groups, session.id is the chatId
+          sessionIdToMatch = currentSession.id;
+        } else {
+          // For private chats, we need to compare with the room's chatId
+          // Find the actual chatId for this private conversation
+          const privateRoom = this.rawRooms().find(room => 
+            !room.isGroup && room.memberIds?.includes(currentUserId) && 
+            room.memberIds?.includes(currentSession.id)
+          );
+          sessionIdToMatch = privateRoom ? privateRoom.chatId : currentSession.id;
+        }
+      }
+      
+      // Check if this message belongs to the currently open session
+      const isBelongToCurrentSession = sessionIdToMatch ? (chatId === sessionIdToMatch) : false;
+      console.log('🔍 [Facade] Message belongs to current session?', isBelongToCurrentSession,
+                  '- MessageChatId:', chatId, 'SessionChatId:', sessionIdToMatch);
 
       // Nếu đúng session đang mở -> thêm vào list messages
       if (isBelongToCurrentSession) {
         this.messages.update(old => [...old, msg]);
         this.isRecipientTyping.set(false);
 
-        // [MỚI] Nếu là tin nhắn đến (không phải mình gửi) và đang mở chat 1-1 -> Đánh dấu đã xem ngay
-        if (msg.senderId !== this.currentUser().id && currentSession?.type === 'PRIVATE') {
-            this.chatService.markAsRead(msg.senderId, this.currentUser().id);
+        // [FIXED] Auto-mark as read when message arrives in currently open chat
+        if (msg.senderId !== currentUserId && currentSession) {
+            // Only mark as read if the message is from someone else
+            if (currentSession.type === 'PRIVATE') {
+                // For private chat: mark messages from partner as SEEN
+                // Call with partnerId and myId to mark their messages as seen
+                this.markMessagesAsRead(currentSession.id);
+            } else if (currentSession.type === 'GROUP') {
+                // For group chat: mark messages not sent by me as SEEN
+                this.markMessagesAsRead(currentSession.id);
+            }
         }
       }
+
+      // [UNREAD LOGIC] Update unread count for sessions
+      this.updateSessionWithNewMessage(msg, chatId, isBelongToCurrentSession);
       
       // Nếu là liên hệ mới hoặc nhóm mới chưa có trong list -> reload sidebar
       this.checkAndReloadSessions(msg);
@@ -189,7 +249,11 @@ export class ChatFacade {
                 name: room.groupName || 'Nhóm không tên',
                 avatar: 'assets/group-icon.png', 
                 type: 'GROUP',
-                memberCount: room.memberIds ? room.memberIds.length : 0
+                memberCount: room.memberIds ? room.memberIds.length : 0,
+                // [FIX] Use actual values from backend
+                unreadCount: room.unreadCount || 0,
+                lastMessage: room.lastMessage,
+                lastMessageTimestamp: room.lastMessageTimestamp ? new Date(room.lastMessageTimestamp) : undefined
             } as ChatSession;
         } 
         
@@ -211,7 +275,11 @@ export class ChatFacade {
                 name: fullName,
                 avatar: undefined, 
                 type: 'PRIVATE',
-                status: 'OFFLINE'
+                status: 'OFFLINE',
+                // [FIX] Use actual values from backend
+                unreadCount: room.unreadCount || 0,
+                lastMessage: room.lastMessage,
+                lastMessageTimestamp: room.lastMessageTimestamp ? new Date(room.lastMessageTimestamp) : undefined
             } as ChatSession;
         }
     });
@@ -242,19 +310,26 @@ export class ChatFacade {
     this.selectedSession.set(session);
     this.isRecipientTyping.set(false);
 
+    // [UNREAD LOGIC] Optimistically reset unread count for this session
+    this.sessions.update(sessions => 
+      sessions.map(s => 
+        s.id === session.id ? { ...s, unreadCount: 0 } : s
+      )
+    );
+
     // Xử lý riêng cho từng loại
     if (session.type === 'PRIVATE') {
         // --- LOGIC CŨ: Load Online Status ---
         this.loadUserStatus(session.id);
-        
-        // [MỚI] Khi bấm vào chat 1-1, báo cho server biết mình đã đọc tin nhắn của họ
-        this.chatService.markAsRead(session.id, this.currentUser().id);
     } else {
         // --- LOGIC MỚI: Group không cần check online ---
         this.partnerStatus.set('ONLINE');
         this.lastSeen.set(null);
         if (this.statusSubscription) this.statusSubscription.unsubscribe();
     }
+
+    // [FIXED] Mark messages as read using unified method
+    this.markMessagesAsRead(session.id);
 
     // Load Messages
     this.chatService.getChatMessages(this.currentUser().id, session.id).subscribe(msgs => {
@@ -379,7 +454,10 @@ export class ChatFacade {
           name: partnerName,
           type: 'PRIVATE',
           status: 'OFFLINE',
-          avatar: undefined
+          avatar: undefined,
+          unreadCount: 0,
+          lastMessage: undefined,
+          lastMessageTimestamp: undefined
       };
       
       this.sessions.update(s => [tempSession, ...s]);
@@ -388,6 +466,119 @@ export class ChatFacade {
 
   isGroup() {
       return this.selectedSession()?.type === 'GROUP';
+  }
+
+  // [UNREAD MESSAGE LOGIC] Update session with new message
+  private updateSessionWithNewMessage(msg: ChatMessage, chatId: string | null, isBelongToCurrentSession: boolean) {
+    if (!chatId) {
+      console.warn('⚠️ [Facade] updateSessionWithNewMessage - chatId is null');
+      return;
+    }
+    
+    const currentUserId = this.currentUser().id;
+    const currentSession = this.selectedSession();
+    
+    console.log('📨 [Facade] updateSessionWithNewMessage - ChatId:', chatId, 
+                'From:', msg.senderId, 'IsCurrent:', isBelongToCurrentSession);
+    
+    // Prepare message preview (truncate if needed)
+    let messagePreview = msg.content;
+    if (msg.type === MessageType.IMAGE) {
+      messagePreview = '📷 Image';
+    } else if (msg.type === MessageType.VIDEO) {
+      messagePreview = '🎥 Video';
+    } else if (msg.type === MessageType.FILE) {
+      messagePreview = `📎 ${msg.fileName || 'File'}`;
+    }
+
+    // [CRITICAL FIX] Find the matching session by chatId from rawRooms
+    const matchingRoom = this.rawRooms().find(room => room.chatId === chatId);
+    if (!matchingRoom) {
+      console.warn('⚠️ [Facade] No room found for chatId:', chatId);
+      return;
+    }
+    
+    // Determine the session ID to update based on room type
+    let sessionIdToUpdate: string;
+    if (matchingRoom.isGroup) {
+      // For groups: session.id is the chatId
+      sessionIdToUpdate = matchingRoom.chatId;
+    } else {
+      // For private chats: session.id is the partner's ID
+      sessionIdToUpdate = matchingRoom.senderId === currentUserId 
+        ? matchingRoom.recipientId 
+        : matchingRoom.senderId;
+    }
+
+    console.log('🔍 [Facade] Updating session with ID:', sessionIdToUpdate, 
+                'Room type:', matchingRoom.isGroup ? 'GROUP' : 'PRIVATE');
+
+    // Update sessions
+    this.sessions.update(sessions => {
+      return sessions.map(session => {
+        // [CRITICAL] Match by the correct session ID
+        if (session.id === sessionIdToUpdate) {
+          const updatedSession = { ...session };
+          const oldUnreadCount = session.unreadCount || 0;
+          
+          // Update last message and timestamp
+          updatedSession.lastMessage = messagePreview;
+          updatedSession.lastMessageTimestamp = msg.timestamp || new Date();
+          
+          // Increment unread count only if:
+          // 1. The message is NOT from the current user
+          // 2. AND the chat is NOT currently active
+          if (msg.senderId !== currentUserId && !isBelongToCurrentSession) {
+            updatedSession.unreadCount = oldUnreadCount + 1;
+            console.log('🔔 [Facade] Unread count for', session.name, 'incremented:', 
+                        oldUnreadCount, '->', updatedSession.unreadCount);
+          } else {
+            console.log('✅ [Facade] NOT incrementing unread for', session.name, 
+                        '- FromMe:', msg.senderId === currentUserId, 
+                        'IsCurrentChat:', isBelongToCurrentSession);
+          }
+          
+          return updatedSession;
+        }
+        return session;
+      })
+      // Sort by lastMessageTimestamp (newest first)
+      .sort((a, b) => {
+        const timeA = a.lastMessageTimestamp?.getTime() || 0;
+        const timeB = b.lastMessageTimestamp?.getTime() || 0;
+        return timeB - timeA;
+      });
+    });
+  }
+
+  // [NEW] Unified mark as read method for both PRIVATE and GROUP chats
+  private markMessagesAsRead(sessionId: string) {
+    const currentSession = this.selectedSession();
+    if (!currentSession) return;
+
+    const currentUserId = this.currentUser().id;
+
+    if (currentSession.type === 'PRIVATE') {
+        // For private chat: mark messages from partner as SEEN
+        // WebSocket call (legacy)
+        this.chatService.markAsRead(sessionId, currentUserId);
+        
+        // HTTP call for reliability
+        this.chatService.markAsReadHTTP(sessionId, currentUserId).subscribe({
+          next: () => console.log('✅ [Facade] Private messages marked as read'),
+          error: (err) => console.error('❌ [Facade] Failed to mark private messages as read:', err)
+        });
+    } else if (currentSession.type === 'GROUP') {
+        // For group chat: mark messages not sent by me as SEEN
+        // WebSocket call (legacy)
+        this.chatService.markAsRead(currentUserId, sessionId);
+        
+        // HTTP call for reliability
+        this.chatService.markAsReadHTTP(currentUserId, sessionId).subscribe({
+          next: () => console.log('✅ [Facade] Group messages marked as read'),
+          error: (err) => console.error('❌ [Facade] Failed to mark group messages as read:', err)
+        });
+    }
   }
 
   cleanup() {
