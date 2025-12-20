@@ -2,16 +2,38 @@ import { Injectable, signal } from '@angular/core';
 import { ChatService } from './chat.service';
 import { BehaviorSubject } from 'rxjs';
 
-// [CẤU HÌNH QUAN TRỌNG] Danh sách STUN Server của Google
-// Giúp 2 máy tìm thấy nhau xuyên qua 3G/4G/Wifi khác mạng
+// [CẤU HÌNH ĐÃ SỬA] Thêm TURN Server để gọi xuyên 4G/Wifi khác mạng
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-  ]
+    // 1. STUN Servers (Google - Giữ nguyên để tìm IP Public)
+    { 
+      urls: [
+        'stun:stun.l.google.com:19302',
+        'stun:stun1.l.google.com:19302',
+        'stun:stun2.l.google.com:19302'
+      ] 
+    },
+
+    // 2. TURN Servers (MỚI - OpenRelay Project)
+    // Giúp chuyển tiếp dữ liệu khi P2P trực tiếp bị chặn bởi Firewall/NAT
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp', // Hỗ trợ giao thức TCP
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
+  ],
+  // Tăng tốc độ thu thập ứng viên kết nối
+  iceCandidatePoolSize: 10,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -167,7 +189,7 @@ export class WebRTCService {
 
   // Khởi tạo Peer Connection
   private createPeerConnection() {
-    // Dùng cấu hình Google STUN
+    // [QUAN TRỌNG] Dùng cấu hình RTC_CONFIG đã khai báo ở trên (có TURN Server)
     this.peerConnection = new RTCPeerConnection(RTC_CONFIG);
 
     // 1. Khi tìm thấy đường mạng (ICE Candidate) -> Gửi cho đối phương

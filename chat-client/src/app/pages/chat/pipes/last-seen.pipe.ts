@@ -3,7 +3,7 @@ import { Pipe, PipeTransform } from '@angular/core';
 @Pipe({
   name: 'lastSeen',
   standalone: true,
-  pure: false
+  pure: true  // ✅ Changed to pure pipe for better performance
 })
 export class LastSeenPipe implements PipeTransform {
   transform(lastSeen: Date | null, status: string): string {

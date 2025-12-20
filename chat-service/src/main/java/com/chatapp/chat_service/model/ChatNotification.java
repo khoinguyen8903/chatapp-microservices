@@ -17,6 +17,7 @@ public class ChatNotification {
     private String recipientId;
     private String chatId;  // [CRITICAL] Explicit chatId to prevent unread count leakage
     private String content;
+    private String fileName; // Original filename for file attachments
     private MessageStatus status;
     private String senderName;
 

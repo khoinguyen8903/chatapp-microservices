@@ -19,7 +19,8 @@ public class MediaFile {
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    private String fileName;
+    private String fileName; // UUID-based unique filename stored in MinIO
+    private String originalFileName; // Original filename from user upload
     private String contentType;
 
     // --- [SỬA LẠI DÒNG NÀY] ---

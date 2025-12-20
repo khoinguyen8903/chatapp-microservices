@@ -14,11 +14,12 @@ export class NotificationService {
   // Biến lưu tin nhắn hiện tại để hiển thị Toast/Popup (nếu cần)
   currentMessage = new BehaviorSubject<any>(null);
   
-  // [FIX 1] Biến lưu ID phòng chat đang mở
-  activeRoomId: string | null = null;
+  // [FIX 1] Biến lưu chatId của phòng chat đang mở (updated from roomId to chatId for clarity)
+  activeChatId: string | null = null;
 
-  setActiveRoom(roomId: string | null) {
-    this.activeRoomId = roomId;
+  setActiveRoom(chatId: string | null) {
+    this.activeChatId = chatId;
+    console.log('🔔 [NotificationService] Active chat ID set to:', chatId);
   }
 
   constructor() {
@@ -34,25 +35,72 @@ export class NotificationService {
 
     // 3. Lắng nghe tin nhắn khi đang mở App (Foreground)
     onMessage(messaging, (payload) => {
-      console.log('Message received. ', payload);
+      console.log('📬 [NotificationService] Message received:', payload);
       
-      // [FIX 1] Nếu đang mở đúng phòng chat của tin nhắn này thì KHÔNG hiện thông báo
-      const msgRoomId = payload.data?.['roomId']; // Backend cần gửi roomId trong data
-      if (this.activeRoomId && msgRoomId === this.activeRoomId) {
-        console.log('🚫 Đang ở trong phòng chat này, chặn thông báo.');
-        return; 
+      // Extract chatId and senderId from payload
+      const msgChatId = payload.data?.['chatId'] || payload.data?.['roomId'];
+      const msgSenderId = payload.data?.['senderId'];
+      
+      console.log('🔍 [NotificationService] Message chatId:', msgChatId, 
+                  'senderId:', msgSenderId, 'Active chatId:', this.activeChatId);
+      
+      // Skip suppression check if no active chat
+      if (!this.activeChatId) {
+        console.log('🔔 [NotificationService] No active chat - showing notification');
+        this.currentMessage.next(payload);
+        this.showNotificationIfNeeded(payload);
+        return;
+      }
+      
+      // SMART SUPPRESSION LOGIC - Suppress if ANY condition matches:
+      
+      // [CHECK 1] Strict Match: For Group Chats where IDs match exactly
+      if (msgChatId && msgChatId === this.activeChatId) {
+        console.log('✅ [NotificationService] SUPPRESSED - Exact match (Group Chat)');
+        return;
+      }
+      
+      // [CHECK 2] Partial Match: For Private Chats with Composite Room IDs (e.g., "UserA_UserB")
+      // Backend sends composite ID, frontend stores partner ID
+      if (msgChatId && msgChatId.includes(this.activeChatId)) {
+        console.log('✅ [NotificationService] SUPPRESSED - Composite room ID contains active partner ID');
+        return;
+      }
+      
+      // [CHECK 3] Sender Match: Fallback check for backward compatibility
+      if (msgSenderId && msgSenderId === this.activeChatId) {
+        console.log('✅ [NotificationService] SUPPRESSED - Message from active chat partner (senderId match)');
+        return;
       }
 
+      // If we reach here, none of the suppression conditions matched - show the notification
+      console.log('🔔 [NotificationService] Showing notification for inactive chat');
+      
       this.currentMessage.next(payload);
       
-      // [FIX 3] Backend Java gửi: putData("title", senderName) -> Đây chính là tên người gửi
-      // Backend Java gửi: putData("body", messageContent)
-      // [MỚI] Ưu tiên sử dụng senderName từ data, fallback về title, cuối cùng là "Người lạ"
-      const senderName = payload.data?.['senderName'] || payload.data?.['title'] || 'Người lạ';
-      const body = payload.data?.['body'] || 'Bạn có tin nhắn mới';
-      
-      alert(`🔔 ${senderName}: ${body}`);
+      this.showNotificationIfNeeded(payload);
     });
+  }
+
+  // [NEW] Separate method for showing notifications (easier to customize)
+  private showNotificationIfNeeded(payload: any) {
+    // Backend Java sends: putData("title", senderName) -> This is the sender's name
+    // Backend Java sends: putData("body", messageContent)
+    // Priority: senderName from data, fallback to title, finally "Người lạ"
+    const senderName = payload.data?.['senderName'] || payload.data?.['title'] || 'Người lạ';
+    const body = payload.data?.['body'] || 'Bạn có tin nhắn mới';
+    
+    this.showNotification(senderName, body);
+  }
+
+  // Show notification UI (can be customized with Toast/Snackbar)
+  private showNotification(title: string, body: string) {
+    // Option 1: Browser alert (simple but intrusive)
+    alert(`🔔 ${title}: ${body}`);
+    
+    // Option 2: You can replace this with Angular Material Snackbar, ngx-toastr, etc.
+    // Example with Snackbar:
+    // this.snackBar.open(`${title}: ${body}`, 'Close', { duration: 5000 });
   }
 
   // Hàm xin quyền và lấy Token gửi về Backend

@@ -97,6 +97,7 @@ public class ChatRoomService {
      * 4. Tính số tin nhắn chưa đọc
      * [FIXED] Use precise queries that only count SENT or DELIVERED messages
      * This prevents counting old messages with null status or other unexpected statuses
+     * CRITICAL FIX: For private chats, now ensures senderId != recipientId to avoid counting own messages
      */
     private int calculateUnreadCount(String chatId, String userId) {
         // Check if this is a group chat or 1-1 chat
@@ -114,12 +115,13 @@ public class ChatRoomService {
             // For GROUP chat: Count messages NOT sent by userId with status = SENT or DELIVERED
             count = chatMessageRepository.countUnreadMessagesInGroup(chatId, userId);
             System.out.println("📊 [ChatRoomService] GROUP " + chatId + " - User " + userId + 
-                               " has " + count + " unread messages (SENT/DELIVERED only)");
+                               " has " + count + " unread messages (SENT/DELIVERED, NOT from self)");
         } else {
-            // For 1-1 chat: Count messages where recipientId == userId with status = SENT or DELIVERED
+            // For 1-1 chat: Count messages where recipientId == userId AND senderId != userId 
+            // with status = SENT or DELIVERED
             count = chatMessageRepository.countUnreadMessagesForRecipient(chatId, userId);
-            System.out.println("💬 [ChatRoomService] 1-1 Chat " + chatId + " - User " + userId + 
-                               " has " + count + " unread messages (SENT/DELIVERED only)");
+            System.out.println("💬 [ChatRoomService] PRIVATE Chat " + chatId + " - User " + userId + 
+                               " has " + count + " unread messages (SENT/DELIVERED, TO user, NOT FROM user)");
         }
         
         return (int) count;

@@ -42,7 +42,7 @@ public class MediaController {
             // Trả về kết quả
             Map<String, Object> response = new HashMap<>();
             response.put("url", savedFile.getUrl());
-            response.put("fileName", savedFile.getFileName());
+            response.put("fileName", savedFile.getOriginalFileName()); // Return original filename for display
             response.put("type", savedFile.getContentType());
             response.put("size", savedFile.getSize());
 

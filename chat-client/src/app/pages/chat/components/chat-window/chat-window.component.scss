@@ -5,27 +5,24 @@
 // =============================================
 
 :host {
-  display: flex;
-  flex-direction: column;
+  display: block;
   height: 100%;
   width: 100%;
-  overflow: hidden;
-  background: #f9fafb;
-  font-family: 'Inter', sans-serif;
 }
 
-// ===== MAIN CONTAINER =====
-.chat-window-container {
-  display: flex;
+// ===== NUCLEAR FLEX LAYOUT - Native App-like Sticky Layout =====
+.chat-layout-container {
+  display: flex;       /* Flexbox is key */
   flex-direction: column;
-  height: 100%;
+  height: 100%;        /* Fill the fixed body height */
+  min-height: 0;       /* Allow children to shrink (critical for mobile keyboard) */
   width: 100%;
   background: linear-gradient(135deg, #fafbfc 0%, #f3f4f6 100%);
-  position: relative;
 }
 
-// ===== CHAT HEADER (GLASSMORPHISM) =====
+// ===== HEADER: Fixed height, never shrinks =====
 .chat-header {
+  flex: 0 0 auto;      /* Fixed height, never shrinks */
   min-height: 76px;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(20px);
@@ -36,9 +33,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  position: sticky;
-  top: 0;
   z-index: 50;
   transition: all 0.3s ease;
 
@@ -258,15 +252,31 @@
   }
 }
 
+// ===== MESSAGES: Grows to fill space, scrolls internally =====
+.messages-viewport {
+  flex: 1 1 auto;      /* Flexible height */
+  min-height: 0;       /* Allow internal scroll area to shrink in flex layouts */
+  overflow-y: auto;    /* SCROLL HERE, not on body */
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; /* Prevent scroll chain to window */
+  touch-action: pan-y;          /* Re-enable vertical scrolling only here */
+  display: flex;
+  flex-direction: column;
+}
+
 // ===== MESSAGES AREA =====
 .messages-area {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  flex: 1;              /* Fill remaining space in viewport */
   padding: 1.5rem 1rem;
   background: linear-gradient(135deg, #fafbfc 0%, #f3f4f6 100%);
   scroll-behavior: smooth;
   position: relative;
+  
+  // Mobile scrolling optimizations
+  @media (max-width: 767px) {
+    -webkit-overflow-scrolling: touch; // Smooth scrolling on iOS
+  }
 
   // Welcome Screen
   .welcome-screen {
@@ -633,15 +643,24 @@
   }
 }
 
-// ===== MESSAGE INPUT AREA =====
-.message-input-area {
-  padding: 1.25rem 1.5rem;
+// ===== INPUT: Fixed height, never shrinks =====
+.chat-input-area {
+  flex: 0 0 auto;
+  z-index: 50;
+  width: 100%;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid rgba(99, 102, 241, 0.08);
-  flex-shrink: 0;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.02);
+  /* Handle iPhone X+ Home Indicator */
+  padding-bottom: env(safe-area-inset-bottom, 0);
+
+  // Mobile specific adjustments
+  @media (max-width: 767px) {
+    // Safe area adjustments are already handled by padding-bottom above
+    padding-left: max(env(safe-area-inset-left), 0);
+    padding-right: max(env(safe-area-inset-right), 0);
+  }
 
   .input-wrapper {
     display: flex;
@@ -714,6 +733,15 @@
       font-family: 'Inter', sans-serif;
       scrollbar-width: thin;
       scrollbar-color: rgba(99, 102, 241, 0.2) transparent;
+
+      // Android Chrome specific: Prevent unwanted scrolling
+      @supports (-webkit-appearance: none) and (not (-ms-ime-align: auto)) {
+        // Prevent the browser from scrolling the page when focusing
+        scroll-margin: 0;
+        scroll-padding: 0;
+        // Ensure input stays in viewport
+        position: relative;
+      }
 
       &::placeholder {
         color: #9ca3af;
@@ -999,7 +1027,7 @@
     }
   }
 
-  .message-input-area {
+  .chat-input-area {
     padding: 1rem;
 
     .input-wrapper {

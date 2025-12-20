@@ -16,22 +16,27 @@
   padding: 0;
 }
 
-/* ===== ROOT STYLES ===== */
-html {
-  height: 100%;
+/* ===== ROOT STYLES - NUCLEAR BODY LOCK ===== */
+html, body {
+  height: 100%;       /* Fallback */
+  height: 100dvh;     /* Dynamic Viewport Height - adapts to URL bar */
   width: 100%;
-  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;   /* DISABLE global scrolling */
+  position: fixed;    /* 🔒 LOCK the page in place */
+  inset: 0;           /* Ensure fixed positioning fully pins the viewport */
+  overscroll-behavior: none; /* Stop rubber-banding */
+  touch-action: none; /* Prevent browser panning the whole page on mobile */
+}
+
+html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
 body {
-  height: 100%;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 16px;
   line-height: 1.5;

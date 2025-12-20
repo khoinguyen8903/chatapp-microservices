@@ -97,13 +97,25 @@ export class ChatService {
               senderId: payload.senderId,
               recipientId: payload.recipientId, 
               content: payload.content,
+              fileName: payload.fileName, // Include original filename for file attachments
               timestamp: new Date(),
               type: payload.type || MessageType.TEXT,
               status: payload.status || MessageStatus.SENT 
           };
 
+          // [CRITICAL FIX] Only mark as DELIVERED if message is not already SEEN
+          // Check the incoming message status to prevent backward transitions
           if (payload.senderId !== currentUser.id) {
-              _this.markAsDelivered(payload.senderId, currentUser.id);
+              const incomingStatus = payload.status || MessageStatus.SENT;
+              
+              // Only call markAsDelivered if the message is still SENT
+              // This prevents SEEN messages from being reverted to DELIVERED on reload
+              if (incomingStatus === MessageStatus.SENT) {
+                  console.log('📬 [ChatService] Marking message as DELIVERED (was SENT)');
+                  _this.markAsDelivered(payload.senderId, currentUser.id);
+              } else {
+                  console.log('✅ [ChatService] Message already at status:', incomingStatus, '- NOT marking as DELIVERED');
+              }
           }
           _this.messageSubject.next(chatMessage);
         }

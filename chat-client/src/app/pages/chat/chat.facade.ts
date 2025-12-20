@@ -3,8 +3,10 @@ import { Router } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
 import { WebRTCService } from '../../services/webrtc.service';
+import { NotificationService } from '../../services/notification.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Subscription } from 'rxjs';
+import { distinctUntilChanged } from 'rxjs/operators';
 import { 
   ChatMessage, 
   ChatRoom, 
@@ -19,6 +21,7 @@ export class ChatFacade {
   private chatService = inject(ChatService);
   private authService = inject(AuthService);
   private webRTCService = inject(WebRTCService);
+  private notificationService = inject(NotificationService);
   private router = inject(Router);
 
   // --- STATE (SIGNALS) ---
@@ -150,8 +153,10 @@ export class ChatFacade {
         this.messages.update(old => [...old, msg]);
         this.isRecipientTyping.set(false);
 
-        // [FIXED] Auto-mark as read when message arrives in currently open chat
+        // [CRITICAL FIX] Auto-mark as read when message arrives in currently open chat
+        // This prevents unread count from incrementing for active chats
         if (msg.senderId !== currentUserId && currentSession) {
+            console.log('✅ [Facade] Message arrived in ACTIVE chat - marking as read immediately');
             // Only mark as read if the message is from someone else
             if (currentSession.type === 'PRIVATE') {
                 // For private chat: mark messages from partner as SEEN
@@ -162,10 +167,20 @@ export class ChatFacade {
                 this.markMessagesAsRead(currentSession.id);
             }
         }
+      } else {
+        // [UNREAD LOGIC] Only update unread count if message is NOT in current session
+        // This prevents double-counting for active chats
+        console.log('📬 [Facade] Message arrived in INACTIVE chat - will increment unread count');
+        this.updateSessionWithNewMessage(msg, chatId, isBelongToCurrentSession);
       }
 
-      // [UNREAD LOGIC] Update unread count for sessions
-      this.updateSessionWithNewMessage(msg, chatId, isBelongToCurrentSession);
+      // [ALWAYS] Update session preview (last message, timestamp) regardless of active state
+      if (!isBelongToCurrentSession) {
+        // Already called above for inactive chats
+      } else {
+        // For active chats, still update the preview but WITHOUT incrementing unread count
+        this.updateSessionPreviewOnly(msg, chatId);
+      }
       
       // Nếu là liên hệ mới hoặc nhóm mới chưa có trong list -> reload sidebar
       this.checkAndReloadSessions(msg);
@@ -173,7 +188,13 @@ export class ChatFacade {
     this.subscriptions.add(msgSub);
 
     // 2. Nhận trạng thái Typing
-    const typingSub = this.chatService.onTyping().subscribe((typingMsg) => {
+    const typingSub = this.chatService.onTyping().pipe(
+      distinctUntilChanged((prev, curr) => 
+        prev.senderId === curr.senderId && 
+        prev.recipientId === curr.recipientId && 
+        prev.isTyping === curr.isTyping
+      )
+    ).subscribe((typingMsg) => {
       const currentSession = this.selectedSession();
       if (!currentSession) return;
 
@@ -192,7 +213,12 @@ export class ChatFacade {
     this.subscriptions.add(typingSub);
 
     // 3. Nhận trạng thái Online/Offline (Chỉ áp dụng cho Chat 1-1)
-    const statusSub = this.chatService.onStatusUpdate().subscribe((update: any) => {
+    const statusSub = this.chatService.onStatusUpdate().pipe(
+      distinctUntilChanged((prev, curr) => 
+        prev.userId === curr.userId && 
+        prev.status === curr.status
+      )
+    ).subscribe((update: any) => {
         const currentSession = this.selectedSession();
         // Chỉ update nếu đang chat 1-1 và đúng người
         if (currentSession && currentSession.type === 'PRIVATE' && update.userId === currentSession.id) {
@@ -206,7 +232,12 @@ export class ChatFacade {
     this.subscriptions.add(statusSub);
 
     // 4. [MỚI] Nhận cập nhật trạng thái tin nhắn (Sent -> Seen)
-    const messageStatusSub = this.chatService.onMessageStatusChange().subscribe((payload: any) => {
+    const messageStatusSub = this.chatService.onMessageStatusChange().pipe(
+      distinctUntilChanged((prev, curr) => 
+        prev.contactId === curr.contactId && 
+        prev.status === curr.status
+      )
+    ).subscribe((payload: any) => {
         // Payload: { contactId: "...", status: "SEEN" }
         const currentSession = this.selectedSession();
         
@@ -310,6 +341,27 @@ export class ChatFacade {
     this.selectedSession.set(session);
     this.isRecipientTyping.set(false);
 
+    // [PUSH NOTIFICATION] Update NotificationService about active chat room
+    // Pass the appropriate chatId to suppress notifications for this chat
+    const currentUserId = this.currentUser()?.id;
+    let activeChatId: string | null = null;
+    
+    if (session.type === 'GROUP') {
+      // For groups, chatId is the group's ID
+      activeChatId = session.id;
+    } else {
+      // For private chats, we need to find the actual chatId from rawRooms
+      const privateRoom = this.rawRooms().find(room => 
+        !room.isGroup && 
+        room.memberIds?.includes(currentUserId) && 
+        room.memberIds?.includes(session.id)
+      );
+      activeChatId = privateRoom ? privateRoom.chatId : session.id;
+    }
+    
+    this.notificationService.setActiveRoom(activeChatId);
+    console.log('🔔 [Facade] Set active room for notifications:', activeChatId);
+
     // [UNREAD LOGIC] Optimistically reset unread count for this session
     this.sessions.update(sessions => 
       sessions.map(s => 
@@ -355,17 +407,17 @@ export class ChatFacade {
   }
 
   // [UPDATE] Gửi tin nhắn
-  sendMessage(content: string, type: MessageType = MessageType.TEXT, file?: File, preSanitizedUrl?: string) {
+  sendMessage(content: string, type: MessageType = MessageType.TEXT, file?: File, fileName?: string) {
     const currentSession = this.selectedSession();
     if (!currentSession) return false;
 
-    const finalContent = type === MessageType.TEXT ? content : (preSanitizedUrl || content);
+    const finalContent = type === MessageType.TEXT ? content : content;
 
     const msg: ChatMessage = {
         senderId: this.currentUser().id,
         recipientId: currentSession.id, 
         content: finalContent,
-        fileName: file ? file.name : undefined,
+        fileName: fileName || (file ? file.name : undefined), // Use provided fileName or extract from file
         id: `temp_${Date.now()}`,
         timestamp: new Date(),
         type: type,
@@ -525,7 +577,7 @@ export class ChatFacade {
           updatedSession.lastMessage = messagePreview;
           updatedSession.lastMessageTimestamp = msg.timestamp || new Date();
           
-          // Increment unread count only if:
+          // [CRITICAL FIX] Increment unread count only if:
           // 1. The message is NOT from the current user
           // 2. AND the chat is NOT currently active
           if (msg.senderId !== currentUserId && !isBelongToCurrentSession) {
@@ -533,10 +585,77 @@ export class ChatFacade {
             console.log('🔔 [Facade] Unread count for', session.name, 'incremented:', 
                         oldUnreadCount, '->', updatedSession.unreadCount);
           } else {
+            // Keep unread count as is (don't increment)
             console.log('✅ [Facade] NOT incrementing unread for', session.name, 
                         '- FromMe:', msg.senderId === currentUserId, 
                         'IsCurrentChat:', isBelongToCurrentSession);
           }
+          
+          return updatedSession;
+        }
+        return session;
+      })
+      // Sort by lastMessageTimestamp (newest first)
+      .sort((a, b) => {
+        const timeA = a.lastMessageTimestamp?.getTime() || 0;
+        const timeB = b.lastMessageTimestamp?.getTime() || 0;
+        return timeB - timeA;
+      });
+    });
+  }
+
+  // [NEW] Update session preview (last message, timestamp) WITHOUT incrementing unread count
+  // Used for messages arriving in currently active chat
+  private updateSessionPreviewOnly(msg: ChatMessage, chatId: string | null) {
+    if (!chatId) {
+      console.warn('⚠️ [Facade] updateSessionPreviewOnly - chatId is null');
+      return;
+    }
+    
+    const currentUserId = this.currentUser().id;
+    
+    console.log('📝 [Facade] updateSessionPreviewOnly - ChatId:', chatId);
+    
+    // Prepare message preview (truncate if needed)
+    let messagePreview = msg.content;
+    if (msg.type === MessageType.IMAGE) {
+      messagePreview = '📷 Image';
+    } else if (msg.type === MessageType.VIDEO) {
+      messagePreview = '🎥 Video';
+    } else if (msg.type === MessageType.FILE) {
+      messagePreview = `📎 ${msg.fileName || 'File'}`;
+    }
+
+    // Find the matching session by chatId from rawRooms
+    const matchingRoom = this.rawRooms().find(room => room.chatId === chatId);
+    if (!matchingRoom) {
+      console.warn('⚠️ [Facade] No room found for chatId:', chatId);
+      return;
+    }
+    
+    // Determine the session ID to update based on room type
+    let sessionIdToUpdate: string;
+    if (matchingRoom.isGroup) {
+      sessionIdToUpdate = matchingRoom.chatId;
+    } else {
+      sessionIdToUpdate = matchingRoom.senderId === currentUserId 
+        ? matchingRoom.recipientId 
+        : matchingRoom.senderId;
+    }
+
+    console.log('🔍 [Facade] Updating preview for session ID:', sessionIdToUpdate);
+
+    // Update sessions - ONLY update preview, NOT unread count
+    this.sessions.update(sessions => {
+      return sessions.map(session => {
+        if (session.id === sessionIdToUpdate) {
+          const updatedSession = { ...session };
+          
+          // Update ONLY last message and timestamp
+          updatedSession.lastMessage = messagePreview;
+          updatedSession.lastMessageTimestamp = msg.timestamp || new Date();
+          
+          console.log('📝 [Facade] Updated preview for', session.name, '- Unread count unchanged:', session.unreadCount);
           
           return updatedSession;
         }
@@ -582,6 +701,9 @@ export class ChatFacade {
   }
 
   cleanup() {
+      // [PUSH NOTIFICATION] Clear active room when leaving chat
+      this.notificationService.setActiveRoom(null);
+      
       // Hủy subscription riêng lẻ
       if (this.statusSubscription) this.statusSubscription.unsubscribe();
       

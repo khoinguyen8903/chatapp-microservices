@@ -73,7 +73,8 @@ public class MinioStorageService { // Tên Class giữ nguyên
 
             // 5. Lưu thông tin vào Database
             MediaFile mediaFile = new MediaFile();
-            mediaFile.setFileName(fileName);
+            mediaFile.setFileName(fileName); // UUID-based unique name
+            mediaFile.setOriginalFileName(originalFilename); // Original name from user
             mediaFile.setContentType(file.getContentType());
             mediaFile.setSize(file.getSize());
             mediaFile.setUrl(publicUrl);

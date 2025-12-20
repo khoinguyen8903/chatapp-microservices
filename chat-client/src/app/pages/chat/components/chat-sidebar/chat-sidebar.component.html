@@ -30,7 +30,7 @@
   <!-- User Info Badge -->
   <div class="current-user-badge">
     <div class="user-avatar">
-      {{ (facade.currentUser()?.username || 'U').charAt(0) | uppercase }}
+      {{ facade.currentUser()?.username | avatarInitial }}
     </div>
     <span class="user-name">{{ facade.currentUser()?.username || 'Guest' }}</span>
     <span class="online-dot"></span>
@@ -73,7 +73,7 @@
     </div>
   }
 
-  @for (session of facade.sessions(); track session.id) {
+  @for (session of facade.sessions(); track trackBySessionId($index, session)) {
     <article
       (click)="facade.selectSession(session)"
       class="conversation-card"
@@ -92,7 +92,7 @@
           @if (session.type === 'GROUP') {
             <i class="fas fa-users"></i>
           } @else {
-            <span class="avatar-initial">{{ (session.name || '?').charAt(0) | uppercase }}</span>
+            <span class="avatar-initial">{{ session.name | avatarInitial }}</span>
           }
         </div>
 

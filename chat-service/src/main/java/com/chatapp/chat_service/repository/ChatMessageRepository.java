@@ -15,7 +15,8 @@ public interface ChatMessageRepository extends MongoRepository<ChatMessage, Stri
     
     // [NEW] More precise queries that explicitly check for SENT or DELIVERED status
     // For 1-1 chat: Count messages sent TO userId that are SENT or DELIVERED (not yet SEEN)
-    @Query(value = "{ 'chatId': ?0, 'recipientId': ?1, 'status': { $in: ['SENT', 'DELIVERED'] } }", count = true)
+    // CRITICAL: Also ensures senderId != recipientId to exclude messages sent by the user
+    @Query(value = "{ 'chatId': ?0, 'recipientId': ?1, 'senderId': { $ne: ?1 }, 'status': { $in: ['SENT', 'DELIVERED'] } }", count = true)
     long countUnreadMessagesForRecipient(String chatId, String recipientId);
     
     // For group chat: Count messages NOT sent BY userId that are SENT or DELIVERED (not yet SEEN)

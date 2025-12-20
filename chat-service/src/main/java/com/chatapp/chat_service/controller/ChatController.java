@@ -63,6 +63,7 @@ public class ChatController {
                                     .recipientId(room.getChatId())
                                     .chatId(room.getChatId())  // [CRITICAL] Explicit chatId for group
                                     .content(savedMsg.getContent())
+                                    .fileName(savedMsg.getFileName()) // Include original filename
                                     .type(savedMsg.getType())
                                     .status(savedMsg.getStatus())
                                     .build()
@@ -88,6 +89,7 @@ public class ChatController {
                         .recipientId(savedMsg.getRecipientId())
                         .chatId(savedMsg.getChatId())  // [CRITICAL] Explicit chatId for 1-1
                         .content(savedMsg.getContent())
+                        .fileName(savedMsg.getFileName()) // Include original filename
                         .type(savedMsg.getType())
                         .status(savedMsg.getStatus())
                         .build();

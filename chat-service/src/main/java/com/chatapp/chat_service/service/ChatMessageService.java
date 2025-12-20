@@ -82,7 +82,9 @@ public class ChatMessageService {
         } else if (type == MessageType.VIDEO) {
             return "🎥 Video";
         } else if (type == MessageType.FILE) {
-            return "📎 " + (message.getContent() != null ? message.getContent() : "File");
+            // Use original filename if available, otherwise just show "File"
+            String fileName = message.getFileName();
+            return "📎 " + (fileName != null && !fileName.isEmpty() ? fileName : "File");
         }
         
         return message.getContent();
@@ -223,6 +225,56 @@ public class ChatMessageService {
         return messagesToFix;
     }
 
+    /**
+     * [CRITICAL] Validate if a message status can transition to a new status
+     * Message status must follow the state machine: SENT -> DELIVERED -> SEEN
+     * NEVER allow backward transitions (e.g., SEEN -> DELIVERED)
+     * 
+     * @param currentStatus The current status of the message
+     * @param targetStatus The desired new status
+     * @return true if transition is allowed, false otherwise
+     */
+    private boolean canTransitionTo(MessageStatus currentStatus, MessageStatus targetStatus) {
+        // If current status is null, allow any transition (for migration of old data)
+        if (currentStatus == null) {
+            System.out.println("⚠️ [ChatMessageService] Message has null status, allowing transition to " + targetStatus);
+            return true;
+        }
+        
+        // If already at target status, no update needed
+        if (currentStatus == targetStatus) {
+            return false;
+        }
+        
+        // Define valid state transitions based on message lifecycle
+        // SENT (0) -> DELIVERED (1) -> SEEN (2)
+        int currentLevel = getStatusLevel(currentStatus);
+        int targetLevel = getStatusLevel(targetStatus);
+        
+        // Only allow forward transitions (moving to a higher level)
+        boolean canTransition = targetLevel > currentLevel;
+        
+        if (!canTransition) {
+            System.out.println("🚫 [ChatMessageService] BLOCKED backward transition: " + 
+                               currentStatus + " -> " + targetStatus + " (not allowed)");
+        }
+        
+        return canTransition;
+    }
+    
+    /**
+     * Get the numeric level of a message status for comparison
+     * SENT = 0, DELIVERED = 1, SEEN = 2
+     */
+    private int getStatusLevel(MessageStatus status) {
+        switch (status) {
+            case SENT: return 0;
+            case DELIVERED: return 1;
+            case SEEN: return 2;
+            default: return -1; // Unknown status
+        }
+    }
+
     public List<ChatMessage> updateStatuses(String senderId, String recipientId, MessageStatus status) {
         System.out.println("📝 [ChatMessageService] updateStatuses called - Sender: " + senderId + 
                            ", Recipient: " + recipientId + ", Status: " + status);
@@ -264,10 +316,10 @@ public class ChatMessageService {
         List<ChatMessage> messagesToUpdate;
         
         if (isGroup) {
-            // For GROUP: Mark all messages NOT sent by the current user (senderId) as SEEN
+            // For GROUP: Mark all messages NOT sent by the current user (senderId) with the new status
             messagesToUpdate = messages.stream()
                     .filter(msg -> !msg.getSenderId().equals(senderId))
-                    .filter(msg -> msg.getStatus() != status)
+                    .filter(msg -> canTransitionTo(msg.getStatus(), status)) // [CRITICAL FIX] Prevent backward transitions
                     .peek(msg -> {
                         System.out.println("  🔄 Updating message ID: " + msg.getId() + " from " + msg.getStatus() + " to " + status);
                         msg.setStatus(status);
@@ -275,10 +327,10 @@ public class ChatMessageService {
                     .collect(Collectors.toList());
             System.out.println("👥 [ChatMessageService] GROUP: Marking messages NOT from " + senderId);
         } else {
-            // For 1-1: Mark messages sent by the other person (senderId in payload) as SEEN
+            // For 1-1: Mark messages sent by the other person (senderId in payload) with the new status
             messagesToUpdate = messages.stream()
                     .filter(msg -> msg.getSenderId().equals(senderId))
-                    .filter(msg -> msg.getStatus() != status)
+                    .filter(msg -> canTransitionTo(msg.getStatus(), status)) // [CRITICAL FIX] Prevent backward transitions
                     .peek(msg -> {
                         System.out.println("  🔄 Updating message ID: " + msg.getId() + " from " + msg.getStatus() + " to " + status);
                         msg.setStatus(status);

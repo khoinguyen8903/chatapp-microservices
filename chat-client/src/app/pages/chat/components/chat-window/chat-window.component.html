@@ -1,7 +1,7 @@
-<!-- Premium Chat Window Container -->
-<div class="chat-window-container">
+<!-- Nuclear Flex Layout - Native App-like Sticky Layout -->
+<div class="chat-layout-container">
 
-  <!-- Enhanced Chat Header with Glassmorphism -->
+  <!-- HEADER: Fixed height, never shrinks -->
   <header class="chat-header">
     @if (facade.selectedSession(); as session) {
       <div class="header-wrapper">
@@ -24,7 +24,7 @@
               @if (session.type === 'GROUP') {
                 <i class="fas fa-users"></i>
               } @else {
-                <span class="avatar-text">{{ (session.name || '?').charAt(0) | uppercase }}</span>
+                <span class="avatar-text">{{ session.name | avatarInitial }}</span>
               }
             </div>
 
@@ -95,14 +95,16 @@
     }
   </header>
 
-  <!-- Messages Area with Premium Styling -->
-  <section 
-    id="chat-container" 
-    class="messages-area custom-scrollbar" 
+  <!-- MESSAGES: Grows to fill space, scrolls internally -->
+  <section
+    class="messages-viewport custom-scrollbar"
     #scrollContainer
     role="log"
     aria-live="polite"
     aria-label="Chat messages">
+    <div
+      id="chat-container"
+      class="messages-area">
     
     @if (!facade.selectedSession()) {
       <!-- Welcome Screen (No Chat Selected) -->
@@ -117,7 +119,7 @@
 
     <!-- Message List -->
     <div class="message-list">
-      @for (msg of facade.messages(); track $index) {
+      @for (msg of facade.messages(); track trackByMessageId($index, msg)) {
         <article 
           class="message-wrapper"
           [class.sent]="msg.senderId === facade.currentUser().id"
@@ -141,7 +143,7 @@
               @if (msg.type === MessageType.IMAGE) {
                 <div class="attachment-image">
                   <img 
-                    [src]="FileHelper.sanitizeUrl(msg.content)" 
+                    [src]="msg.content | safeUrl" 
                     alt="Shared image"
                     loading="lazy">
                 </div>
@@ -151,7 +153,7 @@
               @else if (msg.type === MessageType.VIDEO) {
                 <div class="attachment-video">
                   <video controls>
-                    <source [src]="FileHelper.sanitizeUrl(msg.content)">
+                    <source [src]="msg.content | safeUrl">
                   </video>
                 </div>
               }
@@ -159,7 +161,7 @@
               <!-- File Message -->
               @else if (msg.type === MessageType.FILE) {
                 <a 
-                  [href]="FileHelper.sanitizeUrl(msg.content)" 
+                  [href]="msg.content | safeUrl" 
                   target="_blank" 
                   class="attachment-file"
                   [class.file-sent]="msg.senderId === facade.currentUser().id"
@@ -171,7 +173,7 @@
                   
                   <div class="file-details">
                     <p class="file-name text-truncate">
-                      {{ msg.fileName || FileHelper.getFileName(msg.content) }}
+                      {{ msg.fileName || (msg.content | fileName) }}
                     </p>
                     <span class="file-action">Download</span>
                   </div>
@@ -213,10 +215,11 @@
         </div>
       }
     </div>
+    </div>
   </section>
 
-  <!-- Premium Message Input Area -->
-  <footer class="message-input-area">
+  <!-- INPUT: Fixed height, never shrinks -->
+  <footer class="chat-input-area">
     <div class="input-wrapper">
       <!-- Hidden File Input -->
       <input 
