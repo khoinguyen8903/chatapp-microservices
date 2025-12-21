@@ -5,7 +5,6 @@ import { ChatFacade } from '../../chat.facade';
 import { LastSeenPipe } from '../../pipes/last-seen.pipe';
 import { SafeUrlPipe } from '../../pipes/safe-url.pipe';
 import { FileNamePipe } from '../../pipes/file-name.pipe';
-import { AvatarInitialPipe } from '../../pipes/avatar-initial.pipe';
 import { FileHelper } from '../../utils/file.helper';
 import { MessageType, MessageStatus, ChatMessage, ChatSession } from '../../../../models/chat.models';
 import { NotificationService } from '../../../../services/notification.service';
@@ -13,7 +12,7 @@ import { NotificationService } from '../../../../services/notification.service';
 @Component({
   selector: 'app-chat-window',
   standalone: true,
-  imports: [CommonModule, FormsModule, LastSeenPipe, SafeUrlPipe, FileNamePipe, AvatarInitialPipe],
+  imports: [CommonModule, FormsModule, LastSeenPipe, SafeUrlPipe, FileNamePipe],
   templateUrl: './chat-window.component.html',
   styleUrls: ['./chat-window.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush  // ✅ OnPush for better performance
@@ -321,5 +320,11 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     } else {
       setTimeout(scrollToBottomFn, 100);
     }
+  }
+
+  onAvatarError(event: Event) {
+    const img = event.target as HTMLImageElement | null;
+    if (!img) return;
+    img.src = 'assets/default-avatar.svg';
   }
 }

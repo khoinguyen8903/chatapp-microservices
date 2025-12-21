@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap } from 'rxjs';
+import { BehaviorSubject, Observable, tap } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 // --- ĐỊNH NGHĨA MODELS (DTO) ---
@@ -29,6 +29,12 @@ export interface RegisterRequest {
 })
 export class AuthService {
   private apiUrl = `${environment.apiUrl}/api/auth`;
+
+  /**
+   * Single source of truth for the logged-in user across the app.
+   * Kept in sync with localStorage so refresh still works.
+   */
+  readonly currentUser$ = new BehaviorSubject<any>(this.getCurrentUser());
 
   constructor(private http: HttpClient) { }
 
@@ -60,11 +66,15 @@ export class AuthService {
     localStorage.setItem('token', data.token);
     
     // Lưu thông tin User vào localStorage để dùng lại sau này
-    localStorage.setItem('user', JSON.stringify({
+    const user = {
       id: data.userId,       // [QUAN TRỌNG] Đây là ID thật
       username: data.username,
-      name: data.fullName
-    }));
+      name: data.fullName,
+      avatarUrl: (data as any)?.avatarUrl // backend may or may not provide this
+    };
+
+    localStorage.setItem('user', JSON.stringify(user));
+    this.currentUser$.next(user);
   }
 
   getToken(): string | null {
@@ -92,8 +102,20 @@ export class AuthService {
     return userJson ? JSON.parse(userJson) : null;
   }
 
+  /**
+   * Update the stored current user (and notify subscribers).
+   * Use this after profile updates (fullName/avatar) so UI stays in sync.
+   */
+  updateCurrentUser(patch: Partial<any>) {
+    const current = this.getCurrentUser() || {};
+    const nextUser = { ...current, ...patch };
+    localStorage.setItem('user', JSON.stringify(nextUser));
+    this.currentUser$.next(nextUser);
+  }
+
   logout() {
     localStorage.clear();
+    this.currentUser$.next(null);
     // Nên reload lại trang hoặc chuyển về trang login để xóa sạch state
     window.location.href = '/login'; 
   }

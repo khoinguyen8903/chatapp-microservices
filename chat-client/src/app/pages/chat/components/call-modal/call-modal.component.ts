@@ -90,4 +90,10 @@ export class CallModalComponent {
     this.isMicMuted = false;
     this.isCameraOff = false;
   }
+
+  onAvatarError(event: Event) {
+    const img = event.target as HTMLImageElement | null;
+    if (!img) return;
+    img.src = 'assets/default-avatar.svg';
+  }
 }

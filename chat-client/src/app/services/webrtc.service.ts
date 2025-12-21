@@ -2,6 +2,8 @@ import { Injectable, signal } from '@angular/core';
 import { ChatService } from './chat.service';
 import { BehaviorSubject } from 'rxjs';
 
+const DEFAULT_AVATAR = 'assets/default-avatar.svg';
+
 // [CẤU HÌNH] Tối ưu cho kết nối xuyên mạng (Wifi <-> 4G)
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
@@ -36,10 +38,18 @@ export class WebRTCService {
   isVideoCall$ = new BehaviorSubject<boolean>(true);
   callState = signal<string>('IDLE'); 
 
+  // Expose current call partner for UI (incoming/outgoing overlays)
+  partnerId = signal<string | null>(null);
+  partnerAvatar = signal<string>(DEFAULT_AVATAR);
+
   constructor(private chatService: ChatService) {
     this.chatService.onCallMessage().subscribe(async (msg: any) => {
       await this.handleServerSignal(msg);
     });
+  }
+
+  setPartnerAvatar(url?: string | null) {
+    this.partnerAvatar.set(url || DEFAULT_AVATAR);
   }
 
   // ==========================================
@@ -134,6 +144,7 @@ export class WebRTCService {
     this.isGroupCall = isGroup;
     this.isVideoCall$.next(videoEnabled);
     this.callState.set('OUTGOING');
+    this.partnerId.set(partnerId);
 
     await this.initLocalStream(videoEnabled);
     this.createPeerConnection();
@@ -153,6 +164,7 @@ export class WebRTCService {
     this.isGroupCall = msg.isGroup;
     this.isVideoCall$.next(msg.videoEnabled !== false);
     this.callState.set('INCOMING');
+    this.partnerId.set(msg.senderId);
     
     this.createPeerConnection();
     await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(msg.data));
@@ -213,6 +225,8 @@ export class WebRTCService {
     this.remoteStream$.next(null);
     this.iceCandidatesQueue = [];
     this.callState.set('IDLE');
+    this.partnerId.set(null);
+    this.partnerAvatar.set(DEFAULT_AVATAR);
   }
 
   private sendSignal(type: string, data: any) {

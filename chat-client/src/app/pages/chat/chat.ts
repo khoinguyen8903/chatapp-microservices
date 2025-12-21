@@ -32,6 +32,9 @@ export class Chat implements OnInit, OnDestroy {
   isMobileView = computed(() => this.isMobile());
   shouldShowSidebar = computed(() => !this.isMobile() || this.showSidebar());
 
+  // Stable callback reference for <app-chat-window> Input (avoid creating a new function in template)
+  readonly onBackToSidebar = () => this.goBackToSidebar();
+
   constructor(
     private facade: ChatFacade,
     private notificationService: NotificationService,

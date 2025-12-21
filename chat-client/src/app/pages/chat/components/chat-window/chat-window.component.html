@@ -21,11 +21,13 @@
               [class.group-avatar]="session.type === 'GROUP'"
               [class.private-avatar]="session.type === 'PRIVATE'">
               
-              @if (session.type === 'GROUP') {
-                <i class="fas fa-users"></i>
-              } @else {
-                <span class="avatar-text">{{ session.name | avatarInitial }}</span>
-              }
+              <img
+                [src]="session.avatar"
+                (error)="onAvatarError($event)"
+                [alt]="session.name + ' avatar'"
+                class="avatar-img"
+                loading="lazy"
+              >
             </div>
 
             @if (session.type === 'PRIVATE') {

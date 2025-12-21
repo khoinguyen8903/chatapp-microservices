@@ -1,12 +1,14 @@
-import { Injectable, signal, computed, inject, effect } from '@angular/core';
+import { Injectable, signal, computed, inject, effect, Injector, runInInjectionContext } from '@angular/core';
 import { Router } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
 import { WebRTCService } from '../../services/webrtc.service';
 import { NotificationService } from '../../services/notification.service';
+import { UserService } from '../../services/user.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Subscription } from 'rxjs';
 import { distinctUntilChanged } from 'rxjs/operators';
+import { environment } from '../../../environments/environment';
 import { 
   ChatMessage, 
   ChatRoom, 
@@ -16,13 +18,18 @@ import {
   MessageStatus 
 } from '../../models/chat.models';
 
+const DEFAULT_AVATAR = 'assets/default-avatar.svg';
+const GROUP_AVATAR = 'assets/group-icon.svg';
+
 @Injectable({ providedIn: 'root' })
 export class ChatFacade {
   private chatService = inject(ChatService);
   private authService = inject(AuthService);
   private webRTCService = inject(WebRTCService);
   private notificationService = inject(NotificationService);
+  private userService = inject(UserService);
   private router = inject(Router);
+  private injector = inject(Injector);
 
   // --- STATE (SIGNALS) ---
   currentUser = signal<any>(null);
@@ -47,29 +54,109 @@ export class ChatFacade {
   remoteStream = toSignal(this.webRTCService.remoteStream$);
   isVideoCall = toSignal(this.webRTCService.isVideoCall$, { initialValue: true }); // [UPDATE] Lấy từ Service
 
+  // --- WEBRTC PARTNER UI (Avatar/Name for incoming/outgoing overlays) ---
+  callPartnerId = this.webRTCService.partnerId;
+  callPartnerAvatar = computed(() => this.webRTCService.partnerAvatar());
+  callPartnerName = computed(() => {
+    const id = this.webRTCService.partnerId();
+    if (!id) return '';
+    const fromSessions = this.sessions().find(s => s.id === id)?.name;
+    if (fromSessions) return fromSessions;
+    const cached = this.userCache.get(id)?.username;
+    return cached || 'Unknown';
+  });
+
   // Cache user để đỡ phải gọi API nhiều lần
-  private userCache = new Map<string, string>();
+  private userCache = new Map<string, { username: string; avatarUrl?: string }>();
   
   // Quản lý tất cả subscription để cleanup gọn gàng
   private subscriptions = new Subscription();
   // Subscription riêng cho status để switch qua lại giữa các user
   private statusSubscription: Subscription | null = null;
+  private userSubscription: Subscription | null = null;
 
   constructor() {
     // Constructor nên giữ đơn giản. Logic khởi tạo chuyển sang init()
     // để Component gọi khi khởi tạo view.
+
+    // Keep WebRTC partner avatar in sync even for INCOMING calls (when selectedSession may not match).
+    // NOTE: effect() must be created inside an injection context (NG0203 otherwise).
+    runInInjectionContext(this.injector, () => {
+      effect(() => {
+        const partnerId = this.webRTCService.partnerId();
+        if (!partnerId) return;
+
+        // Prefer known sessions list (already mapped + cached)
+        const existing = this.sessions().find(s => s.id === partnerId);
+        if (existing?.avatar) {
+          this.webRTCService.setPartnerAvatar(existing.avatar);
+          return;
+        }
+
+        // Fallback: fetch user info for PRIVATE calls
+        if (!this.userCache.has(partnerId)) {
+          this.fetchUserInfo(partnerId);
+        } else {
+          const cached = this.userCache.get(partnerId);
+          this.webRTCService.setPartnerAvatar(cached?.avatarUrl || DEFAULT_AVATAR);
+        }
+      });
+    });
+  }
+
+  private normalizeAvatarUrl(url?: string | null): string {
+    if (!url) return DEFAULT_AVATAR;
+    const value = String(url).trim();
+    if (!value) return DEFAULT_AVATAR;
+
+    // Already an app asset
+    if (value.startsWith('assets/')) return value;
+
+    // Absolute http(s)
+    if (/^https?:\/\//i.test(value)) return value;
+
+    // Protocol-relative URL
+    if (value.startsWith('//')) return `${window.location.protocol}${value}`;
+
+    // Relative path from backend
+    const base = String(environment.apiUrl || '').replace(/\/+$/, '');
+    if (!base) return value;
+
+    if (value.startsWith('/')) return `${base}${value}`;
+    return `${base}/${value}`;
   }
 
   // Hàm này được gọi từ ChatComponent (ngOnInit)
   init() {
-    const userStr = localStorage.getItem('user');
-    if (!userStr) {
+    const current = this.authService.getCurrentUser();
+    if (!current) {
       this.router.navigate(['/login']);
       return;
     }
 
-    this.currentUser.set(JSON.parse(userStr));
+    // Keep facade currentUser in sync with AuthService (profile updates, avatar changes, etc.)
+    if (this.userSubscription) this.userSubscription.unsubscribe();
+    this.userSubscription = this.authService.currentUser$.subscribe((u) => this.currentUser.set(u));
+
+    this.currentUser.set(current);
     this.chatService.connect(this.currentUser());
+
+    // Hydrate current user's avatar from profile API so Sidebar shows it even after fresh login
+    // (login response typically doesn't include avatarUrl).
+    const profileSub = this.userService.getCurrentUserProfile().subscribe({
+      next: (profile) => {
+        this.authService.updateCurrentUser({
+          username: profile.username,
+          name: profile.fullName,
+          avatarUrl: this.normalizeAvatarUrl(profile.avatarUrl)
+        });
+      },
+      error: () => {
+        // Non-blocking: keep whatever we already have in localStorage
+      }
+    });
+    this.subscriptions.add(profileSub);
+
     this.loadRooms();
     this.setupSocketListeners();
   }
@@ -278,7 +365,7 @@ export class ChatFacade {
             return {
                 id: room.chatId,
                 name: room.groupName || 'Nhóm không tên',
-                avatar: 'assets/group-icon.png', 
+                avatar: GROUP_AVATAR, 
                 type: 'GROUP',
                 memberCount: room.memberIds ? room.memberIds.length : 0,
                 // [FIX] Use actual values from backend
@@ -292,19 +379,22 @@ export class ChatFacade {
         else {
             const partnerId = this.getPartnerId(room);
             let fullName = 'Loading...';
+            let avatar = DEFAULT_AVATAR;
             
-            // Check cache xem có tên chưa
+            // Check cache xem có tên/avatar chưa
             if (this.userCache.has(partnerId)) {
-                fullName = this.userCache.get(partnerId)!;
+                const cached = this.userCache.get(partnerId)!;
+                fullName = cached.username;
+                avatar = this.normalizeAvatarUrl(cached.avatarUrl);
             } else {
-                // Nếu chưa có, gọi API lấy tên (Lazy Load)
-                this.fetchUserName(partnerId);
+                // Nếu chưa có, gọi API lấy info (Lazy Load)
+                this.fetchUserInfo(partnerId);
             }
 
             return {
                 id: partnerId,
                 name: fullName,
-                avatar: undefined, 
+                avatar: avatar, 
                 type: 'PRIVATE',
                 status: 'OFFLINE',
                 // [FIX] Use actual values from backend
@@ -318,20 +408,34 @@ export class ChatFacade {
     this.sessions.set(sessions);
   }
 
-  // Helper để fetch tên user 1-1
-  private fetchUserName(userId: string) {
+  // Helper để fetch info user 1-1 (username + avatar)
+  private fetchUserInfo(userId: string) {
       this.authService.getUserById(userId).subscribe({
           next: (user: any) => {
-              this.userCache.set(userId, user.username);
+              const normalizedAvatar = this.normalizeAvatarUrl(user.avatarUrl);
+              this.userCache.set(userId, { username: user.username, avatarUrl: normalizedAvatar });
               // Update lại signal sessions để UI hiển thị tên mới
               this.sessions.update(current => {
                   return current.map(s => {
                       if (s.id === userId && s.type === 'PRIVATE') {
-                          return { ...s, name: user.username };
+                          return { ...s, name: user.username, avatar: normalizedAvatar };
                       }
                       return s;
                   });
               });
+
+              // If currently selected session matches, update it too (so header/call uses latest avatar)
+              this.selectedSession.update((s) => {
+                if (s && s.id === userId && s.type === 'PRIVATE') {
+                  return { ...s, name: user.username, avatar: normalizedAvatar };
+                }
+                return s;
+              });
+
+              // If WebRTC is currently calling this partner, update the call avatar
+              if (this.webRTCService.partnerId() === userId) {
+                this.webRTCService.setPartnerAvatar(normalizedAvatar);
+              }
           }
       });
   }
@@ -435,6 +539,7 @@ export class ChatFacade {
     if (!session) return;
 
     const isGroup = session.type === 'GROUP';
+    this.webRTCService.setPartnerAvatar(session.avatar || DEFAULT_AVATAR);
     // [FIX] Gọi hàm chuẩn, không cần ép kiểu any nữa
     this.webRTCService.startCall(session.id, isGroup, true);
   }
@@ -444,6 +549,7 @@ export class ChatFacade {
     if (!session) return;
 
     const isGroup = session.type === 'GROUP';
+    this.webRTCService.setPartnerAvatar(session.avatar || DEFAULT_AVATAR);
     // [FIX] Gọi hàm chuẩn
     this.webRTCService.startCall(session.id, isGroup, false);
   }
@@ -506,7 +612,7 @@ export class ChatFacade {
           name: partnerName,
           type: 'PRIVATE',
           status: 'OFFLINE',
-          avatar: undefined,
+          avatar: DEFAULT_AVATAR,
           unreadCount: 0,
           lastMessage: undefined,
           lastMessageTimestamp: undefined
@@ -706,6 +812,7 @@ export class ChatFacade {
       
       // Hủy subscription riêng lẻ
       if (this.statusSubscription) this.statusSubscription.unsubscribe();
+      if (this.userSubscription) this.userSubscription.unsubscribe();
       
       // Hủy toàn bộ listener socket khi component bị hủy
       this.subscriptions.unsubscribe();

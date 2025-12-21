@@ -30,7 +30,13 @@
   <!-- User Info Badge -->
   <div class="current-user-badge">
     <div class="user-avatar">
-      {{ facade.currentUser()?.username | avatarInitial }}
+      <img
+        [src]="facade.currentUser()?.avatarUrl || 'assets/default-avatar.svg'"
+        (error)="onAvatarError($event)"
+        alt="My avatar"
+        class="avatar-img"
+        loading="lazy"
+      >
     </div>
     <span class="user-name">{{ facade.currentUser()?.username || 'Guest' }}</span>
     <span class="online-dot"></span>
@@ -88,12 +94,13 @@
           class="avatar"
           [class.group-avatar]="session.type === 'GROUP'"
           [class.private-avatar]="session.type === 'PRIVATE'">
-          
-          @if (session.type === 'GROUP') {
-            <i class="fas fa-users"></i>
-          } @else {
-            <span class="avatar-initial">{{ session.name | avatarInitial }}</span>
-          }
+          <img
+            [src]="session.avatar"
+            (error)="onAvatarError($event)"
+            [alt]="session.name + ' avatar'"
+            class="avatar-img"
+            loading="lazy"
+          >
         </div>
 
         <!-- Online Status Indicator -->

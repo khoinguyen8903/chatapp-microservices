@@ -127,12 +127,11 @@ export class ProfileComponent implements OnInit {
           this.isEditing = false;
           this.successMessage = 'Profile updated successfully!';
           
-          // Update localStorage with new name
-          const currentUser = this.authService.getCurrentUser();
-          if (currentUser) {
-            currentUser.name = updatedProfile.fullName;
-            localStorage.setItem('user', JSON.stringify(currentUser));
-          }
+          // Keep app-wide current user in sync (name + avatar)
+          this.authService.updateCurrentUser({
+            name: updatedProfile.fullName,
+            avatarUrl: updatedProfile.avatarUrl
+          });
 
           setTimeout(() => {
             this.successMessage = '';
@@ -192,6 +191,12 @@ export class ProfileComponent implements OnInit {
               next: (updatedProfile) => {
                 this.profile = updatedProfile;
                 this.successMessage = 'Avatar updated successfully!';
+
+                // Keep app-wide current user in sync (avatar)
+                this.authService.updateCurrentUser({
+                  avatarUrl: updatedProfile.avatarUrl
+                });
+
                 this.cdr.detectChanges();
                 setTimeout(() => {
                   this.successMessage = '';
