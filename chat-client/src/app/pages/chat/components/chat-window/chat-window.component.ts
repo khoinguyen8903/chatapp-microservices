@@ -57,6 +57,12 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   MessageType = MessageType;
   MessageStatus = MessageStatus;
 
+  // --- Audio UI state (duration cache, one-at-a-time playback) ---
+  private audioDurationByMessageKey = new Map<string, number>(); // seconds
+  private currentlyPlayingAudioKey: string | null = null;
+  private audioDurationResolveInFlight = new Set<string>();
+  private audioCtx: AudioContext | null = null;
+
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef;
 
   // Stable listener references (so removeEventListener actually works)
@@ -657,5 +663,140 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     const img = event.target as HTMLImageElement | null;
     if (!img) return;
     img.src = 'assets/default-avatar.svg';
+  }
+
+  // --- Custom audio player helpers ---
+  onAudioLoadedMetadata(msg: ChatMessage, audioEl: HTMLAudioElement) {
+    const key = this.getAudioKey(msg);
+    if (!key) return;
+
+    const dur = Number.isFinite(audioEl.duration) ? audioEl.duration : 0;
+    if (!dur || dur <= 0) {
+      // Fallback for servers that don't expose duration via media metadata (e.g., missing range support)
+      this.tryResolveAudioDurationFromUrl(msg);
+      return;
+    }
+
+    this.audioDurationByMessageKey.set(key, dur);
+    this.cdr.markForCheck();
+  }
+
+  getAudioDurationLabel(msg: ChatMessage): string {
+    const key = this.getAudioKey(msg);
+    if (!key) return '--:--';
+    const sec = this.audioDurationByMessageKey.get(key);
+    if (!sec || !Number.isFinite(sec) || sec <= 0) return '--:--';
+    return this.formatAudioTime(sec);
+  }
+
+  private getAudioKey(msg: ChatMessage): string | null {
+    // Prefer stable backend ID, otherwise fall back to URL (good enough for UI duration cache)
+    return (msg?.id || msg?.content || null) as string | null;
+  }
+
+  private isSameAudioMessage(msg: ChatMessage, key: string): boolean {
+    return (!!msg?.id && msg.id === key) || (!!msg?.content && msg.content === key);
+  }
+
+  private tryResolveAudioDurationFromUrl(msg: ChatMessage) {
+    const key = this.getAudioKey(msg);
+    const url = msg?.content;
+    if (!key || !url) return;
+    if (this.audioDurationByMessageKey.has(key)) return;
+    if (this.audioDurationResolveInFlight.has(key)) return;
+
+    this.audioDurationResolveInFlight.add(key);
+
+    // Compute duration by downloading + decoding audio (works even when <audio>.duration is NaN/0)
+    // NOTE: Requires CORS to allow fetch() from your frontend origin.
+    (async () => {
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`fetch failed: ${resp.status}`);
+        const buf = await resp.arrayBuffer();
+
+        // Lazily create AudioContext (reuse)
+        const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (!Ctx) throw new Error('AudioContext not supported');
+        if (!this.audioCtx) this.audioCtx = new Ctx();
+
+        // decodeAudioData callback API vs promise API differences across browsers
+        const audioBuffer: AudioBuffer = await new Promise((resolve, reject) => {
+          const ctx: AudioContext = this.audioCtx!;
+          const copy = buf.slice(0);
+          const maybePromise = (ctx as any).decodeAudioData(copy, resolve, reject);
+          if (maybePromise && typeof maybePromise.then === 'function') {
+            (maybePromise as Promise<AudioBuffer>).then(resolve).catch(reject);
+          }
+        });
+
+        const sec = audioBuffer?.duration;
+        if (sec && Number.isFinite(sec) && sec > 0) {
+          this.audioDurationByMessageKey.set(key, sec);
+          this.cdr.markForCheck();
+        }
+      } catch (e) {
+        // Keep --:-- if we can't resolve. Most common causes: CORS blocked or unsupported codec.
+        console.warn('⚠️ [ChatWindow] Could not resolve audio duration from URL:', e);
+      } finally {
+        this.audioDurationResolveInFlight.delete(key);
+      }
+    })();
+  }
+
+  private formatAudioTime(totalSeconds: number): string {
+    const s = Math.max(0, Math.floor(totalSeconds));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${String(r).padStart(2, '0')}`;
+  }
+
+  toggleAudio(msg: ChatMessage, audioEl: HTMLAudioElement) {
+    const key = this.getAudioKey(msg);
+    if (!key) return;
+
+    // Stop other playing audio first (1-at-a-time like Messenger)
+    if (this.currentlyPlayingAudioKey && this.currentlyPlayingAudioKey !== key) {
+      const prevKey = this.currentlyPlayingAudioKey;
+      this.facade.messages.update((msgs) =>
+        msgs.map((m) => (this.isSameAudioMessage(m, prevKey) ? { ...m, isPlaying: false } : m))
+      );
+    }
+
+    const shouldPlay = !msg.isPlaying;
+    this.currentlyPlayingAudioKey = shouldPlay ? key : null;
+
+    this.facade.messages.update((msgs) =>
+      msgs.map((m) => (this.isSameAudioMessage(m, key) ? { ...m, isPlaying: shouldPlay } : m))
+    );
+
+    // Audio element control
+    try {
+      if (shouldPlay) {
+        const p = audioEl.play();
+        if (p && typeof (p as any).catch === 'function') {
+          (p as Promise<void>).catch((e) => {
+            console.error('❌ [ChatWindow] Audio play() failed:', e);
+            this.facade.messages.update((msgs) =>
+              msgs.map((m) => (this.isSameAudioMessage(m, key) ? { ...m, isPlaying: false } : m))
+            );
+            this.currentlyPlayingAudioKey = null;
+          });
+        }
+      } else {
+        audioEl.pause();
+      }
+    } catch (e) {
+      console.error('❌ [ChatWindow] Audio toggle failed:', e);
+    }
+  }
+
+  onAudioEnded(msg: ChatMessage) {
+    const key = this.getAudioKey(msg);
+    if (!key) return;
+    if (this.currentlyPlayingAudioKey === key) this.currentlyPlayingAudioKey = null;
+    this.facade.messages.update((msgs) =>
+      msgs.map((m) => (this.isSameAudioMessage(m, key) ? { ...m, isPlaying: false } : m))
+    );
   }
 }

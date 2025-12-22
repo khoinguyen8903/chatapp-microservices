@@ -181,7 +181,66 @@
               <!-- Audio Message -->
               @else if (msg.type === MessageType.AUDIO) {
                 <div class="attachment-audio">
-                  <audio controls [src]="msg.content | safeUrl"></audio>
+                  <!-- Hidden native audio element (controls removed for UI consistency) -->
+                  <audio
+                    #audioRef
+                    class="native-audio"
+                    preload="metadata"
+                    [src]="msg.content | safeUrl"
+                    (loadedmetadata)="onAudioLoadedMetadata(msg, audioRef)"
+                    (durationchange)="onAudioLoadedMetadata(msg, audioRef)"
+                    (ended)="onAudioEnded(msg)">
+                  </audio>
+
+                  <!-- Custom Messenger-like audio player -->
+                  <div class="audio-player" role="group" aria-label="Voice message player">
+                    <button
+                      type="button"
+                      class="audio-play"
+                      [attr.aria-label]="msg.isPlaying ? 'Pause voice message' : 'Play voice message'"
+                      (click)="toggleAudio(msg, audioRef)">
+                      @if (msg.isPlaying) {
+                        <i class="fas fa-pause"></i>
+                      } @else {
+                        <i class="fas fa-play"></i>
+                      }
+                    </button>
+
+                    <div class="audio-waveform" aria-hidden="true">
+                      <!-- Static waveform placeholder SVG (replace with real waveform later) -->
+                      <svg viewBox="0 0 220 24" preserveAspectRatio="none">
+                        <rect x="2" y="10" width="4" height="8" rx="2"></rect>
+                        <rect x="10" y="6" width="4" height="16" rx="2"></rect>
+                        <rect x="18" y="12" width="4" height="6" rx="2"></rect>
+                        <rect x="26" y="4" width="4" height="18" rx="2"></rect>
+                        <rect x="34" y="9" width="4" height="10" rx="2"></rect>
+                        <rect x="42" y="12" width="4" height="6" rx="2"></rect>
+                        <rect x="50" y="7" width="4" height="14" rx="2"></rect>
+                        <rect x="58" y="11" width="4" height="8" rx="2"></rect>
+                        <rect x="66" y="5" width="4" height="18" rx="2"></rect>
+                        <rect x="74" y="10" width="4" height="8" rx="2"></rect>
+                        <rect x="82" y="6" width="4" height="16" rx="2"></rect>
+                        <rect x="90" y="12" width="4" height="6" rx="2"></rect>
+                        <rect x="98" y="4" width="4" height="18" rx="2"></rect>
+                        <rect x="106" y="9" width="4" height="10" rx="2"></rect>
+                        <rect x="114" y="12" width="4" height="6" rx="2"></rect>
+                        <rect x="122" y="7" width="4" height="14" rx="2"></rect>
+                        <rect x="130" y="11" width="4" height="8" rx="2"></rect>
+                        <rect x="138" y="5" width="4" height="18" rx="2"></rect>
+                        <rect x="146" y="10" width="4" height="8" rx="2"></rect>
+                        <rect x="154" y="6" width="4" height="16" rx="2"></rect>
+                        <rect x="162" y="12" width="4" height="6" rx="2"></rect>
+                        <rect x="170" y="4" width="4" height="18" rx="2"></rect>
+                        <rect x="178" y="9" width="4" height="10" rx="2"></rect>
+                        <rect x="186" y="12" width="4" height="6" rx="2"></rect>
+                        <rect x="194" y="7" width="4" height="14" rx="2"></rect>
+                        <rect x="202" y="11" width="4" height="8" rx="2"></rect>
+                        <rect x="210" y="10" width="4" height="8" rx="2"></rect>
+                      </svg>
+                    </div>
+
+                    <span class="audio-duration">{{ getAudioDurationLabel(msg) }}</span>
+                  </div>
                 </div>
               }
               

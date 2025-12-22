@@ -34,6 +34,8 @@ export interface ChatMessage {
   reactions?: MessageReaction[];
   // UI-only helper (hover state for reactions)
   showReactionBar?: boolean;
+  // UI-only helper (custom audio player state)
+  isPlaying?: boolean;
 }
 
 // 3. Interface Chat Room (Mapping trực tiếp từ JSON API Backend)

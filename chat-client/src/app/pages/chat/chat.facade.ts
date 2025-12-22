@@ -390,6 +390,7 @@ export class ChatFacade {
           ...updated,
           // preserve UI-only state
           showReactionBar: msgs[idx].showReactionBar,
+          isPlaying: msgs[idx].isPlaying,
           // safety: if backend omits reactions for any reason, keep existing
           reactions: (updated.reactions ?? msgs[idx].reactions) as any
         };
