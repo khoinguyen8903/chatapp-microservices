@@ -1,5 +1,6 @@
 package com.chatapp.chat_service.controller;
 
+import com.chatapp.chat_service.dto.ReactionRequest;
 import com.chatapp.chat_service.enums.MessageStatus;
 import com.chatapp.chat_service.model.ChatMessage;
 import com.chatapp.chat_service.model.ChatNotification;
@@ -102,6 +103,46 @@ public class ChatController {
         }
     }
 
+    /**
+     * [NEW] React to a message (toggle/update/remove) and broadcast to room topic.
+     * Frontend sends: { messageId, userId, chatId, type }
+     * Backend broadcasts updated ChatMessage to: /topic/chat/{chatId}
+     */
+    @MessageMapping("/chat.react")
+    public void reactToMessage(@Payload ReactionRequest request) {
+        try {
+            System.out.println("❤️ [ChatController] React request received: " + request);
+
+            if (request == null ||
+                request.getMessageId() == null ||
+                request.getUserId() == null ||
+                request.getType() == null ||
+                request.getChatId() == null) {
+                System.out.println("⚠️ [ChatController] /chat.react missing fields");
+                return;
+            }
+
+            ChatMessage updated = chatMessageService.reactToMessage(
+                    request.getMessageId(),
+                    request.getUserId(),
+                    request.getType()
+            );
+
+            if (updated.getChatId() == null) {
+                System.out.println("⚠️ [ChatController] /chat.react updated message has null chatId: " + updated.getId());
+                return;
+            }
+
+            // Broadcast to requested room topic (and fallback to message.chatId if needed)
+            String chatId = request.getChatId() != null ? request.getChatId() : updated.getChatId();
+            System.out.println("✅ [ChatController] Reaction saved. Broadcasting to: /topic/chat/" + request.getChatId());
+            messagingTemplate.convertAndSend("/topic/chat/" + chatId, updated);
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error in reactToMessage: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
     // 2. KHI NGƯỜI DÙNG KẾT NỐI (User Online)
     @MessageMapping("/user.addUser")
     public void addUser(@Payload String userId, SimpMessageHeaderAccessor headerAccessor) {
@@ -159,7 +200,13 @@ public class ChatController {
     public ResponseEntity<ChatRoom> createGroup(@RequestBody Map<String, Object> payload) {
         String groupName = (String) payload.get("groupName");
         String adminId = (String) payload.get("adminId");
-        List<String> memberIds = (List<String>) payload.get("memberIds");
+        Object rawMemberIds = payload.get("memberIds");
+        List<String> memberIds = new java.util.ArrayList<>();
+        if (rawMemberIds instanceof List<?> list) {
+            for (Object o : list) {
+                if (o != null) memberIds.add(String.valueOf(o));
+            }
+        }
         return ResponseEntity.ok(chatRoomService.createGroupChat(adminId, groupName, memberIds));
     }
 

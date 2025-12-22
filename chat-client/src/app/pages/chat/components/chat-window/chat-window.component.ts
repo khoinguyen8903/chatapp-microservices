@@ -1,18 +1,20 @@
 import { Component, inject, ElementRef, ViewChild, effect, OnDestroy, OnInit, Input, ChangeDetectionStrategy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { PickerModule } from '@ctrl/ngx-emoji-mart';
 import { ChatFacade } from '../../chat.facade';
 import { LastSeenPipe } from '../../pipes/last-seen.pipe';
 import { SafeUrlPipe } from '../../pipes/safe-url.pipe';
 import { FileNamePipe } from '../../pipes/file-name.pipe';
 import { FileHelper } from '../../utils/file.helper';
-import { MessageType, MessageStatus, ChatMessage, ChatSession } from '../../../../models/chat.models';
+import { MessageType, MessageStatus, ChatMessage, ChatSession, MessageReaction } from '../../../../models/chat.models';
 import { NotificationService } from '../../../../services/notification.service';
+import { ChatService } from '../../../../services/chat.service';
 
 @Component({
   selector: 'app-chat-window',
   standalone: true,
-  imports: [CommonModule, FormsModule, LastSeenPipe, SafeUrlPipe, FileNamePipe],
+  imports: [CommonModule, FormsModule, PickerModule, LastSeenPipe, SafeUrlPipe, FileNamePipe],
   templateUrl: './chat-window.component.html',
   styleUrls: ['./chat-window.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush  // ✅ OnPush for better performance
@@ -22,11 +24,24 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
   private notificationService = inject(NotificationService);
   private elementRef = inject(ElementRef);
+  private chatService = inject(ChatService);
 
   // Mobile back button handler
   @Input() onBackToSidebar?: () => void;
 
   newMessage = '';
+  showEmojiPicker = false;
+
+  // --- Long press (mobile) for reactions ---
+  pressTimer: any = null;
+  longPressDuration = 500;
+  private longPressTriggered = false;
+
+  // Desktop hover detection (avoid hover behavior on touch devices)
+  private readonly isHoverCapable =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia !== 'undefined' &&
+    window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   
   // Expose enums to template
   MessageType = MessageType;
@@ -266,6 +281,124 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     if (!this.newMessage.trim()) return;
     this.facade.sendMessage(this.newMessage);
     this.newMessage = '';
+    this.showEmojiPicker = false;
+  }
+
+  toggleEmojiPicker() {
+    if (!this.facade.selectedSession()) return;
+    this.showEmojiPicker = !this.showEmojiPicker;
+  }
+
+  onEmojiClick(event: any) {
+    // ngx-emoji-mart emits EmojiEvent: { emoji: { native: "😀", ... }, ... }
+    const emoji = event?.emoji?.native;
+    if (!emoji) return;
+    this.newMessage = `${this.newMessage}${emoji}`;
+    // keep focus behavior simple; user can keep typing
+  }
+
+  // --- Reactions ---
+  closeAllReactions() {
+    // Close for all messages (tap outside behavior)
+    this.facade.messages.update((msgs) =>
+      msgs.map((m) => ({ ...m, showReactionBar: false }))
+    );
+
+    // Also cancel any pending long-press timer
+    if (this.pressTimer) {
+      clearTimeout(this.pressTimer);
+      this.pressTimer = null;
+    }
+  }
+
+  onMouseEnter(msg: ChatMessage) {
+    if (!this.isHoverCapable) return;
+    msg.showReactionBar = true;
+  }
+
+  onMouseLeave(msg: ChatMessage) {
+    if (!this.isHoverCapable) return;
+    msg.showReactionBar = false;
+  }
+
+  onTouchStart(msg: ChatMessage) {
+    // Touch devices: long press to show reaction bar (normal tap does nothing)
+    this.longPressTriggered = false;
+    if (this.pressTimer) clearTimeout(this.pressTimer);
+
+    this.pressTimer = setTimeout(() => {
+      this.longPressTriggered = true;
+      msg.showReactionBar = true;
+    }, this.longPressDuration);
+  }
+
+  onTouchEnd(_msg: ChatMessage) {
+    // If user releases before duration => normal tap (do nothing)
+    if (this.pressTimer) {
+      clearTimeout(this.pressTimer);
+      this.pressTimer = null;
+    }
+  }
+
+  onTouchCancel(_msg: ChatMessage) {
+    if (this.pressTimer) {
+      clearTimeout(this.pressTimer);
+      this.pressTimer = null;
+    }
+  }
+
+  onReact(message: ChatMessage, emojiType: string) {
+    if (!message?.id) return;
+
+    const userId = this.facade.currentUser()?.id;
+    const chatId = message.chatId || this.facade.selectedSession()?.id;
+
+    if (!userId || !chatId) {
+      console.warn('⚠️ [ChatWindow] Missing userId/chatId for reaction');
+      return;
+    }
+
+    const reactionPayload = {
+      messageId: message.id,
+      userId,
+      chatId,
+      type: emojiType
+    };
+
+    this.chatService.sendReaction(reactionPayload);
+
+    // Hide bar immediately after click (UI helper)
+    message.showReactionBar = false;
+  }
+
+  getReactionIcons(reactions?: MessageReaction[]) {
+    const list = reactions || [];
+    const seen = new Set<string>();
+    const unique: string[] = [];
+
+    // Always show MY reaction first (so user can see what they reacted with)
+    const myUserId = this.facade.currentUser()?.id;
+    if (myUserId) {
+      const mine = list.find(r => r?.userId === myUserId && !!r?.type)?.type;
+      if (mine) {
+        seen.add(mine);
+        unique.push(mine);
+      }
+    }
+
+    for (const r of list) {
+      const t = r?.type;
+      if (!t) continue;
+      if (seen.has(t)) continue;
+      seen.add(t);
+      unique.push(t);
+      if (unique.length >= 3) break;
+    }
+    return unique;
+  }
+
+  getReactionTotal(reactions?: MessageReaction[]) {
+    return (reactions || []).length;
   }
 
   onFileSelected(event: any) {

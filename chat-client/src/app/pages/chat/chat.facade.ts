@@ -343,6 +343,31 @@ export class ChatFacade {
         }
     });
     this.subscriptions.add(messageStatusSub);
+
+    // 5. [NEW] Room-wide message updates (reactions, etc.)
+    const msgUpdateSub = this.chatService.onMessageUpdate().subscribe((updated) => {
+      if (!updated?.id) return;
+      console.log('🔁 [Facade] Received message update:', updated);
+
+      // Update existing message by ID (replace), otherwise append
+      this.messages.update((msgs) => {
+        const idx = msgs.findIndex(m => m.id === updated.id);
+        if (idx === -1) {
+          return [...msgs, updated];
+        }
+
+        const next = msgs.slice();
+        next[idx] = {
+          ...updated,
+          // preserve UI-only state
+          showReactionBar: msgs[idx].showReactionBar,
+          // safety: if backend omits reactions for any reason, keep existing
+          reactions: (updated.reactions ?? msgs[idx].reactions) as any
+        };
+        return next;
+      });
+    });
+    this.subscriptions.add(msgUpdateSub);
   }
 
   // --- API CALLS & LOGIC ---
@@ -454,17 +479,23 @@ export class ChatFacade {
       // For groups, chatId is the group's ID
       activeChatId = session.id;
     } else {
-      // For private chats, we need to find the actual chatId from rawRooms
-      const privateRoom = this.rawRooms().find(room => 
-        !room.isGroup && 
-        room.memberIds?.includes(currentUserId) && 
-        room.memberIds?.includes(session.id)
+      // For private chats, find the actual chatId from rawRooms.
+      // IMPORTANT: Do NOT rely on memberIds (backend may omit it for private rooms).
+      const privateRoom = this.rawRooms().find(room =>
+        !room.isGroup &&
+        (
+          (room.senderId === currentUserId && room.recipientId === session.id) ||
+          (room.senderId === session.id && room.recipientId === currentUserId)
+        )
       );
       activeChatId = privateRoom ? privateRoom.chatId : session.id;
     }
     
     this.notificationService.setActiveRoom(activeChatId);
     console.log('🔔 [Facade] Set active room for notifications:', activeChatId);
+
+    // [NEW] Subscribe to room-wide updates (e.g., reactions) for this chatId
+    this.chatService.setActiveChat(activeChatId);
 
     // [UNREAD LOGIC] Optimistically reset unread count for this session
     this.sessions.update(sessions => 
@@ -525,7 +556,8 @@ export class ChatFacade {
         id: `temp_${Date.now()}`,
         timestamp: new Date(),
         type: type,
-        senderName: this.currentUser().username 
+        senderName: this.currentUser().username,
+        reactions: []
     };
 
     const isSent = this.chatService.sendMessage(msg);

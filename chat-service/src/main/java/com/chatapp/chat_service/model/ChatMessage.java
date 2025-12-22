@@ -9,7 +9,9 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -17,6 +19,14 @@ import java.util.Date;
 @Builder
 @Document(collection = "chat_messages")
 public class ChatMessage {
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class Reaction {
+        private String userId;
+        private String type; // emoji char, e.g. "❤️"
+    }
+
     @Id
     private String id;
     private String chatId;
@@ -33,4 +43,8 @@ public class ChatMessage {
     // --- [THÊM MỚI TRẠNG THÁI] ---
     @Builder.Default
     private MessageStatus status = MessageStatus.SENT;
+
+    // --- [NEW] Message reactions ---
+    @Builder.Default
+    private List<Reaction> reactions = new ArrayList<>();
 }

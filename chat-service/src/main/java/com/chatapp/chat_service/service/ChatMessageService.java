@@ -186,6 +186,41 @@ public class ChatMessageService {
         return repository.findById(id).orElseThrow(() -> new RuntimeException("Not found"));
     }
 
+    /**
+     * [NEW] Toggle / update a user's reaction for a message.
+     * Rules:
+     * - If user reacted with same emoji again -> remove reaction (toggle off)
+     * - If user reacted with different emoji -> update to new emoji
+     * - If user never reacted -> add new reaction
+     */
+    public ChatMessage reactToMessage(String messageId, String userId, String type) {
+        ChatMessage message = findById(messageId);
+
+        if (message.getReactions() == null) {
+            message.setReactions(new ArrayList<>());
+        }
+
+        Optional<ChatMessage.Reaction> existingOpt = message.getReactions().stream()
+                .filter(r -> r != null && userId != null && userId.equals(r.getUserId()))
+                .findFirst();
+
+        if (existingOpt.isPresent()) {
+            ChatMessage.Reaction existing = existingOpt.get();
+
+            // Toggle off if same reaction
+            if (existing.getType() != null && existing.getType().equals(type)) {
+                message.getReactions().remove(existing);
+            } else {
+                // Update to new emoji
+                existing.setType(type);
+            }
+        } else {
+            message.getReactions().add(new ChatMessage.Reaction(userId, type));
+        }
+
+        return repository.save(message);
+    }
+
     public void updateStatus(String id, MessageStatus status) {
         repository.findById(id).ifPresent(message -> {
             message.setStatus(status);

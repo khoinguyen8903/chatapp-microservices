@@ -101,6 +101,7 @@
   <section
     class="messages-viewport custom-scrollbar"
     #scrollContainer
+    (click)="closeAllReactions()"
     role="log"
     aria-live="polite"
     aria-label="Chat messages">
@@ -139,7 +140,24 @@
             <div 
               class="message-bubble"
               [class.bubble-sent]="msg.senderId === facade.currentUser().id"
-              [class.bubble-received]="msg.senderId !== facade.currentUser().id">
+              [class.bubble-received]="msg.senderId !== facade.currentUser().id"
+              [class.has-reactions]="msg.reactions && msg.reactions.length > 0"
+              (mouseenter)="onMouseEnter(msg)"
+              (mouseleave)="onMouseLeave(msg)"
+              (touchstart)="onTouchStart(msg)"
+              (touchend)="onTouchEnd(msg)"
+              (touchcancel)="onTouchCancel(msg)">
+
+              <!-- Reaction Bar -->
+              @if (msg.showReactionBar) {
+                <div class="reaction-bar" (click)="$event.stopPropagation()">
+                  <button class="reaction-item" (click)="onReact(msg, '❤️')" type="button">❤️</button>
+                  <button class="reaction-item" (click)="onReact(msg, '😆')" type="button">😆</button>
+                  <button class="reaction-item" (click)="onReact(msg, '😮')" type="button">😮</button>
+                  <button class="reaction-item" (click)="onReact(msg, '😢')" type="button">😢</button>
+                  <button class="reaction-item" (click)="onReact(msg, '👍')" type="button">👍</button>
+                </div>
+              }
               
               <!-- Image Message -->
               @if (msg.type === MessageType.IMAGE) {
@@ -186,6 +204,18 @@
               @else {
                 <p class="message-text">{{ msg.content }}</p>
               }
+
+              <!-- Reactions Display (pill, slightly outside bubble) -->
+              @if (msg.reactions && msg.reactions.length > 0) {
+                <div class="reactions-display">
+                  <div class="reaction-icons">
+                    @for (icon of getReactionIcons(msg.reactions); track $index) {
+                      <span class="reaction-icon">{{ icon }}</span>
+                    }
+                  </div>
+                  <span class="reaction-total">{{ getReactionTotal(msg.reactions) }}</span>
+                </div>
+              }
             </div>
 
             <!-- Message Metadata (Timestamp + Status) -->
@@ -223,6 +253,16 @@
   <!-- INPUT: Fixed height, never shrinks -->
   <footer class="chat-input-area">
     <div class="input-wrapper">
+      @if (showEmojiPicker) {
+        <div class="emoji-picker-popover">
+          <emoji-mart
+            [isNative]="true"
+            [set]="'apple'"
+            (emojiClick)="onEmojiClick($event)">
+          </emoji-mart>
+        </div>
+      }
+
       <!-- Hidden File Input -->
       <input 
         type="file" 
@@ -239,6 +279,16 @@
         title="Attach file"
         aria-label="Attach file">
         <i class="fas fa-paperclip"></i>
+      </button>
+
+      <!-- Emoji Button -->
+      <button
+        (click)="toggleEmojiPicker()"
+        [disabled]="!facade.selectedSession()"
+        class="emoji-button"
+        title="Emoji"
+        aria-label="Open emoji picker">
+        <i class="far fa-smile"></i>
       </button>
 
       <!-- Message Textarea -->

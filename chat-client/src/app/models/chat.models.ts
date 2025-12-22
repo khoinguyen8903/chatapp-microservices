@@ -13,6 +13,11 @@ export enum MessageStatus {
   SEEN = 'SEEN'
 }
 
+export interface MessageReaction {
+  userId: string;
+  type: string; // emoji char, e.g. "❤️"
+}
+
 // 2. Interface Tin nhắn (Khớp với Java Backend)
 export interface ChatMessage {
   id?: string;
@@ -25,6 +30,9 @@ export interface ChatMessage {
   fileName?: string;    // Tên file (nếu có)
   status?: MessageStatus;
   senderName?: string;  
+  reactions?: MessageReaction[];
+  // UI-only helper (hover state for reactions)
+  showReactionBar?: boolean;
 }
 
 // 3. Interface Chat Room (Mapping trực tiếp từ JSON API Backend)
