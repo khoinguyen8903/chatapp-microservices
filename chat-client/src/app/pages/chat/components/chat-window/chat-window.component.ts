@@ -1,4 +1,4 @@
-import { Component, inject, ElementRef, ViewChild, effect, OnDestroy, OnInit, Input, ChangeDetectionStrategy, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, inject, ElementRef, ViewChild, effect, OnDestroy, OnInit, Input, ChangeDetectionStrategy, ChangeDetectorRef, HostListener, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PickerModule } from '@ctrl/ngx-emoji-mart';
@@ -22,6 +22,7 @@ import { ChatService } from '../../../../services/chat.service';
 export class ChatWindowComponent implements OnInit, OnDestroy {
   public facade = inject(ChatFacade);
   private cdr = inject(ChangeDetectorRef);
+  private ngZone = inject(NgZone);
   private notificationService = inject(NotificationService);
   private elementRef = inject(ElementRef);
   private chatService = inject(ChatService);
@@ -31,6 +32,15 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
 
   newMessage = '';
   showEmojiPicker = false;
+
+  // --- Voice message (audio recording) ---
+  isRecording = false;
+  recordingTime = '00:00';
+  mediaRecorder: MediaRecorder | null = null;
+  audioChunks: any[] = [];
+  recordingInterval: any = null;
+  private recordingStream: MediaStream | null = null;
+  private recordingStartTs = 0;
 
   // --- Long press (mobile) for reactions ---
   pressTimer: any = null;
@@ -252,6 +262,7 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   // [MỚI] Reset khi component bị hủy (Người dùng chuyển trang khác)
   ngOnDestroy() {
     this.notificationService.setActiveRoom(null);
+    this.cancelRecording();
 
     // Cleanup event listeners
     window.removeEventListener('resize', this.handleViewportChange);
@@ -282,6 +293,193 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     this.facade.sendMessage(this.newMessage);
     this.newMessage = '';
     this.showEmojiPicker = false;
+  }
+
+  // --- Voice message actions ---
+  async startRecording() {
+    if (this.isRecording) return;
+    if (!this.facade.selectedSession()) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.recordingStream = stream;
+
+      // getUserMedia resolves outside Angular zone in some browsers -> wrap UI state updates
+      this.ngZone.run(() => {
+        // Reset state
+        this.audioChunks = [];
+        this.recordingStartTs = Date.now();
+        this.recordingTime = '00:00';
+
+        const recorder = new MediaRecorder(stream);
+        this.mediaRecorder = recorder;
+
+        recorder.ondataavailable = (event: BlobEvent) => {
+          if (event?.data && event.data.size > 0) {
+            this.audioChunks.push(event.data);
+          }
+        };
+
+        // Start recording
+        recorder.start();
+        this.isRecording = true;
+        this.showEmojiPicker = false;
+        this.cdr.markForCheck();
+
+        // Timer (MM:SS)
+        if (this.recordingInterval) clearInterval(this.recordingInterval);
+        this.recordingInterval = setInterval(() => {
+          // Interval callbacks can also be outside zone -> update inside run()
+          this.ngZone.run(() => {
+            const elapsedSec = Math.floor((Date.now() - this.recordingStartTs) / 1000);
+            const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+            const ss = String(elapsedSec % 60).padStart(2, '0');
+            this.recordingTime = `${mm}:${ss}`;
+            this.cdr.markForCheck();
+          });
+        }, 1000);
+      });
+    } catch (err) {
+      console.error('❌ [ChatWindow] Failed to start audio recording:', err);
+      this.cancelRecording();
+    }
+  }
+
+  stopRecording(): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      // Always stop interval ASAP
+      if (this.recordingInterval) {
+        clearInterval(this.recordingInterval);
+        this.recordingInterval = null;
+      }
+
+      const recorder = this.mediaRecorder;
+      if (!recorder) {
+        this.isRecording = false;
+        return reject(new Error('No active MediaRecorder'));
+      }
+
+      const finalize = () => {
+        try {
+          const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
+
+          // MediaRecorder events can fire outside zone -> reset UI state inside run()
+          this.ngZone.run(() => {
+            this.isRecording = false;
+            this.mediaRecorder = null;
+            this.audioChunks = [];
+            this.recordingTime = '00:00';
+            this.cdr.markForCheck();
+          });
+
+          // stop microphone
+          if (this.recordingStream) {
+            this.recordingStream.getTracks().forEach(t => t.stop());
+            this.recordingStream = null;
+          }
+          resolve(blob);
+        } catch (e) {
+          reject(e);
+        }
+      };
+
+      recorder.onstop = finalize;
+
+      try {
+        if (recorder.state !== 'inactive') recorder.stop();
+        else finalize();
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  cancelRecording() {
+    // Clear timer
+    if (this.recordingInterval) {
+      clearInterval(this.recordingInterval);
+      this.recordingInterval = null;
+    }
+
+    // Stop recorder if running
+    try {
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        this.mediaRecorder.stop();
+      }
+    } catch {
+      // noop
+    }
+
+    // Stop microphone tracks
+    if (this.recordingStream) {
+      try {
+        this.recordingStream.getTracks().forEach(t => t.stop());
+      } catch {}
+      this.recordingStream = null;
+    }
+
+    // Reset UI state inside zone (in case cancel happens from an async callback)
+    this.ngZone.run(() => {
+      this.mediaRecorder = null;
+      this.audioChunks = [];
+      this.recordingTime = '00:00';
+      this.isRecording = false;
+      this.cdr.markForCheck();
+    });
+  }
+
+  async onSendRecording() {
+    if (!this.isRecording) return;
+    if (!this.facade.selectedSession()) return;
+
+    try {
+      const blob = await this.stopRecording();
+      if (!blob || blob.size === 0) return;
+
+      const timestamp = Date.now();
+      const file = new File([blob], `voice_message_${timestamp}.webm`, { type: 'audio/webm' });
+
+      // CRITICAL: use existing chatService.uploadFile(file)
+      this.chatService.uploadFile(file).subscribe({
+        next: (res: any) => {
+          // Upload response can be either:
+          // - a string URL
+          // - or an object: { url, fileName, ... }
+          const url: string | undefined =
+            typeof res === 'string' ? res : (res?.url as string | undefined);
+
+          console.log('Audio URL:', url);
+
+          if (!url) {
+            console.error('❌ [ChatWindow] Upload succeeded but URL is missing in response:', res);
+            return;
+          }
+
+          console.log('Sending socket audio message...');
+
+          const fileName = (typeof res === 'object' ? res?.fileName : undefined) || file.name;
+
+          // Send immediately via WebSocket
+          const ok = this.chatService.sendMessage({
+            senderId: this.facade.currentUser().id,
+            recipientId: this.facade.selectedSession()!.id,
+            content: url,
+            fileName,
+            type: MessageType.AUDIO,
+            id: `temp_${Date.now()}`,
+            timestamp: new Date(),
+            senderName: this.facade.currentUser().username,
+            reactions: []
+          });
+
+          console.log('✅ [ChatWindow] sendMessage(AUDIO) returned:', ok);
+        },
+        error: (err) => console.error('❌ [ChatWindow] Voice upload failed:', err)
+      });
+    } catch (err) {
+      console.error('❌ [ChatWindow] Failed to send recording:', err);
+      this.cancelRecording();
+    }
   }
 
   toggleEmojiPicker() {

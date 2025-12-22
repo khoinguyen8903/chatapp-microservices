@@ -177,6 +177,13 @@
                   </video>
                 </div>
               }
+
+              <!-- Audio Message -->
+              @else if (msg.type === MessageType.AUDIO) {
+                <div class="attachment-audio">
+                  <audio controls [src]="msg.content | safeUrl"></audio>
+                </div>
+              }
               
               <!-- File Message -->
               @else if (msg.type === MessageType.FILE) {
@@ -253,7 +260,7 @@
   <!-- INPUT: Fixed height, never shrinks -->
   <footer class="chat-input-area">
     <div class="input-wrapper">
-      @if (showEmojiPicker) {
+      @if (showEmojiPicker && !isRecording) {
         <div class="emoji-picker-popover">
           <emoji-mart
             [isNative]="true"
@@ -274,44 +281,83 @@
       <!-- Attachment Button -->
       <button
         (click)="fileInput.click()"
-        [disabled]="!facade.selectedSession()"
+        [disabled]="!facade.selectedSession() || isRecording"
         class="attachment-button"
         title="Attach file"
         aria-label="Attach file">
         <i class="fas fa-paperclip"></i>
       </button>
 
-      <!-- Emoji Button -->
-      <button
-        (click)="toggleEmojiPicker()"
-        [disabled]="!facade.selectedSession()"
-        class="emoji-button"
-        title="Emoji"
-        aria-label="Open emoji picker">
-        <i class="far fa-smile"></i>
-      </button>
+      @if (!isRecording) {
+        <!-- Emoji Button -->
+        <button
+          (click)="toggleEmojiPicker()"
+          [disabled]="!facade.selectedSession()"
+          class="emoji-button"
+          title="Emoji"
+          aria-label="Open emoji picker">
+          <i class="far fa-smile"></i>
+        </button>
 
-      <!-- Message Textarea -->
-      <textarea
-        [(ngModel)]="newMessage"
-        (keyup.enter)="sendMessage()"
-        (input)="onInputTyping()"
-        placeholder="Type a message..."
-        rows="1"
-        class="message-input"
-        [disabled]="!facade.selectedSession()"
-        aria-label="Message input">
-      </textarea>
+        <!-- Message Textarea -->
+        <textarea
+          [(ngModel)]="newMessage"
+          (keyup.enter)="sendMessage()"
+          (input)="onInputTyping()"
+          placeholder="Type a message..."
+          rows="1"
+          class="message-input"
+          [disabled]="!facade.selectedSession()"
+          aria-label="Message input">
+        </textarea>
 
-      <!-- Send Button -->
-      <button
-        (click)="sendMessage()"
-        [disabled]="!newMessage.trim() || !facade.selectedSession()"
-        class="send-button"
-        title="Send message"
-        aria-label="Send message">
-        <i class="fas fa-paper-plane"></i>
-      </button>
+        <!-- Microphone Button -->
+        <button
+          (click)="startRecording()"
+          [disabled]="!facade.selectedSession()"
+          class="mic-button"
+          title="Record voice message"
+          aria-label="Record voice message"
+          type="button">
+          <i class="fas fa-microphone"></i>
+        </button>
+
+        <!-- Send Button -->
+        <button
+          (click)="sendMessage()"
+          [disabled]="!newMessage.trim() || !facade.selectedSession()"
+          class="send-button"
+          title="Send message"
+          aria-label="Send message">
+          <i class="fas fa-paper-plane"></i>
+        </button>
+      } @else {
+        <!-- Recording UI -->
+        <div class="recording-bar" role="group" aria-label="Voice recording controls">
+          <button
+            (click)="cancelRecording()"
+            class="recording-cancel"
+            type="button"
+            title="Cancel recording"
+            aria-label="Cancel recording">
+            <i class="fas fa-trash"></i>
+          </button>
+
+          <div class="recording-center" aria-label="Recording timer">
+            <span class="recording-dot" aria-hidden="true"></span>
+            <span class="recording-time">{{ recordingTime }}</span>
+          </div>
+
+          <button
+            (click)="onSendRecording()"
+            class="recording-send"
+            type="button"
+            title="Send recording"
+            aria-label="Send recording">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </div>
+      }
     </div>
   </footer>
 

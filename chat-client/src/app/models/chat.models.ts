@@ -5,7 +5,8 @@ export enum MessageType {
   TEXT = 'TEXT',
   IMAGE = 'IMAGE',
   VIDEO = 'VIDEO',
-  FILE = 'FILE'
+  FILE = 'FILE',
+  AUDIO = 'AUDIO'
 }
 export enum MessageStatus {
   SENT = 'SENT',

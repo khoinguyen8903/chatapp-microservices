@@ -126,6 +126,32 @@ export class ChatFacade {
     return `${base}/${value}`;
   }
 
+  private formatLastMessagePreview(lastMessage?: string | null): string | undefined {
+    if (!lastMessage) return undefined;
+    const value = String(lastMessage).trim();
+    if (!value) return undefined;
+
+    // Try to show friendly labels for attachments (especially AUDIO voice messages)
+    const lower = value.toLowerCase();
+
+    // Our voice recordings are named: voice_message_<timestamp>.webm
+    if (lower.includes('voice_message_')) return '🎤 Voice message';
+
+    // Common audio extensions
+    if (/\.(mp3|wav|ogg|m4a|aac|flac)(\?.*)?$/i.test(lower)) return '🎤 Voice message';
+
+    // Images
+    if (/\.(png|jpe?g|gif|webp)(\?.*)?$/i.test(lower)) return '📷 Image';
+
+    // Videos
+    if (/\.(mp4|mov|mkv)(\?.*)?$/i.test(lower)) return '🎥 Video';
+
+    // Generic file (avoid showing long URLs in sidebar)
+    if (/^https?:\/\//i.test(value) && value.length > 60) return '📎 Attachment';
+
+    return value;
+  }
+
   // Hàm này được gọi từ ChatComponent (ngOnInit)
   init() {
     const current = this.authService.getCurrentUser();
@@ -220,11 +246,14 @@ export class ChatFacade {
           // For groups, session.id is the chatId
           sessionIdToMatch = currentSession.id;
         } else {
-          // For private chats, we need to compare with the room's chatId
-          // Find the actual chatId for this private conversation
-          const privateRoom = this.rawRooms().find(room => 
-            !room.isGroup && room.memberIds?.includes(currentUserId) && 
-            room.memberIds?.includes(currentSession.id)
+          // For private chats, compare using the real chatId for this conversation.
+          // IMPORTANT: Do NOT rely on memberIds (backend may omit it for private rooms).
+          const privateRoom = this.rawRooms().find(room =>
+            !room.isGroup &&
+            (
+              (room.senderId === currentUserId && room.recipientId === currentSession.id) ||
+              (room.senderId === currentSession.id && room.recipientId === currentUserId)
+            )
           );
           sessionIdToMatch = privateRoom ? privateRoom.chatId : currentSession.id;
         }
@@ -395,7 +424,7 @@ export class ChatFacade {
                 memberCount: room.memberIds ? room.memberIds.length : 0,
                 // [FIX] Use actual values from backend
                 unreadCount: room.unreadCount || 0,
-                lastMessage: room.lastMessage,
+                lastMessage: this.formatLastMessagePreview(room.lastMessage),
                 lastMessageTimestamp: room.lastMessageTimestamp ? new Date(room.lastMessageTimestamp) : undefined
             } as ChatSession;
         } 
@@ -424,7 +453,7 @@ export class ChatFacade {
                 status: 'OFFLINE',
                 // [FIX] Use actual values from backend
                 unreadCount: room.unreadCount || 0,
-                lastMessage: room.lastMessage,
+                lastMessage: this.formatLastMessagePreview(room.lastMessage),
                 lastMessageTimestamp: room.lastMessageTimestamp ? new Date(room.lastMessageTimestamp) : undefined
             } as ChatSession;
         }
@@ -679,6 +708,8 @@ export class ChatFacade {
       messagePreview = '🎥 Video';
     } else if (msg.type === MessageType.FILE) {
       messagePreview = `📎 ${msg.fileName || 'File'}`;
+    } else if (msg.type === MessageType.AUDIO) {
+      messagePreview = '🎤 Voice message';
     }
 
     // [CRITICAL FIX] Find the matching session by chatId from rawRooms
@@ -762,6 +793,8 @@ export class ChatFacade {
       messagePreview = '🎥 Video';
     } else if (msg.type === MessageType.FILE) {
       messagePreview = `📎 ${msg.fileName || 'File'}`;
+    } else if (msg.type === MessageType.AUDIO) {
+      messagePreview = '🎤 Voice message';
     }
 
     // Find the matching session by chatId from rawRooms

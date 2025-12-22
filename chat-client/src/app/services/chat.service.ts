@@ -45,6 +45,14 @@ export class ChatService {
     return this.http.post(`${this.apiUrl}/api/v1/media/upload`, formData);
   }
 
+  /**
+   * Upload file for chat attachments (alias of uploadImage).
+   * NOTE: Kept to match UI expectation: chatService.uploadFile(file)
+   */
+  uploadFile(file: File): Observable<any> {
+    return this.uploadImage(file);
+  }
+
   createGroup(groupName: string, adminId: string, memberIds: string[]): Observable<ChatRoom> {
       const payload = { groupName, adminId, memberIds };
       return this.http.post<ChatRoom>(`${this.apiUrl}/rooms/group`, payload);
