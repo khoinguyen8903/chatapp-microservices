@@ -23,4 +23,8 @@ public class ChatNotification {
 
     // --- [THÊM MỚI] ---
     private MessageType type;
+    
+    // --- [NEW] Message management fields ---
+    private String replyToId; // ID of the message being replied to
+    private String messageStatus; // 'SENT' or 'REVOKED'
 }

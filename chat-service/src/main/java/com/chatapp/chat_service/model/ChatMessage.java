@@ -47,4 +47,15 @@ public class ChatMessage {
     // --- [NEW] Message reactions ---
     @Builder.Default
     private List<Reaction> reactions = new ArrayList<>();
+
+    // --- [NEW] Reply feature ---
+    private String replyToId; // ID of the message being replied to
+
+    // --- [NEW] Delete for me feature ---
+    @Builder.Default
+    private List<String> deletedForUsers = new ArrayList<>(); // User IDs who deleted this message locally
+
+    // --- [NEW] Message revoke status ---
+    // Can be: "SENT", "REVOKED" (null means SENT for backwards compatibility)
+    private String messageStatus; // Using String instead of enum to avoid conflict with existing 'status' field
 }

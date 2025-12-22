@@ -176,14 +176,67 @@ public class ChatMessageService {
                 .collect(Collectors.toList());
             repository.saveAll(fixedMessages);
             System.out.println("✅ [ChatMessageService] Fixed all messages with null status");
-            return fixedMessages;
+            messages = fixedMessages;
         }
+        
+        // [NEW] Filter out messages deleted by the current user (senderId is the requester here)
+        messages = messages.stream()
+                .filter(msg -> msg.getDeletedForUsers() == null || !msg.getDeletedForUsers().contains(senderId))
+                .collect(Collectors.toList());
         
         return messages;
     }
 
     public ChatMessage findById(String id) {
         return repository.findById(id).orElseThrow(() -> new RuntimeException("Not found"));
+    }
+
+    /**
+     * [NEW] Revoke/unsend a message (everyone sees it as revoked).
+     * Sets messageStatus to 'REVOKED' without deleting the DB record.
+     */
+    public ChatMessage revokeMessage(String messageId) {
+        Optional<ChatMessage> messageOpt = repository.findById(messageId);
+        
+        if (messageOpt.isEmpty()) {
+            System.out.println("⚠️ [ChatMessageService] Message not found: " + messageId);
+            return null;
+        }
+        
+        ChatMessage message = messageOpt.get();
+        message.setMessageStatus("REVOKED");
+        
+        System.out.println("🚫 [ChatMessageService] Revoking message: " + messageId);
+        return repository.save(message);
+    }
+
+    /**
+     * [NEW] Delete a message for a specific user only (local delete).
+     * Adds userId to the deletedForUsers list. Other users can still see the message.
+     */
+    public ChatMessage deleteMessageForUser(String messageId, String userId) {
+        Optional<ChatMessage> messageOpt = repository.findById(messageId);
+        
+        if (messageOpt.isEmpty()) {
+            System.out.println("⚠️ [ChatMessageService] Message not found: " + messageId);
+            return null;
+        }
+        
+        ChatMessage message = messageOpt.get();
+        
+        if (message.getDeletedForUsers() == null) {
+            message.setDeletedForUsers(new ArrayList<>());
+        }
+        
+        // Only add if not already in the list
+        if (!message.getDeletedForUsers().contains(userId)) {
+            message.getDeletedForUsers().add(userId);
+            System.out.println("🗑️ [ChatMessageService] Deleting message " + messageId + " for user: " + userId);
+            return repository.save(message);
+        }
+        
+        System.out.println("ℹ️ [ChatMessageService] Message already deleted for user: " + userId);
+        return message;
     }
 
     /**

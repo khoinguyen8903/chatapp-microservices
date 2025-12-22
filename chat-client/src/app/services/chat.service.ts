@@ -114,7 +114,9 @@ export class ChatService {
               timestamp: new Date(),
               type: payload.type || MessageType.TEXT,
               status: payload.status || MessageStatus.SENT,
-              reactions: (payload.reactions || []) as MessageReaction[]
+              reactions: (payload.reactions || []) as MessageReaction[],
+              replyToId: payload.replyToId, // [NEW] Reply info
+              messageStatus: payload.messageStatus // [NEW] Revoke status
           };
 
           // [CRITICAL FIX] Only mark as DELIVERED if message is not already SEEN
@@ -267,6 +269,34 @@ export class ChatService {
       }
     }
     return false;
+  }
+
+  /**
+   * [NEW] Revoke/unsend a message via WebSocket.
+   * Destination: /app/chat.revoke
+   * Payload: { messageId, chatId }
+   */
+  revokeMessage(messageId: string, chatId: string): boolean {
+    if (this.stompClient && this.stompClient.connected) {
+      try {
+        const payload = { messageId, chatId };
+        this.stompClient.send('/app/chat.revoke', this.getAuthHeaders(), JSON.stringify(payload));
+        console.log('🚫 [ChatService] Revoke message sent:', payload);
+        return true;
+      } catch (e) {
+        console.error('Error revoking message:', e);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * [NEW] Delete a message for the current user only (HTTP API).
+   * Others can still see the message.
+   */
+  deleteMessageForMe(messageId: string, userId: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/messages/delete/${messageId}/${userId}`, {});
   }
 
   subscribeToStatus(partnerId: string) {

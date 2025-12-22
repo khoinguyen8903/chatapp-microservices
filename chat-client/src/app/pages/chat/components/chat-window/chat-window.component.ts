@@ -42,6 +42,18 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   private recordingStream: MediaStream | null = null;
   private recordingStartTs = 0;
 
+  // --- [NEW] Context Menu for Message Actions ---
+  contextMenuVisible = false;
+  contextMenuMsg: ChatMessage | null = null;
+  contextMenuPosition = { x: 0, y: 0 };
+  
+  // --- [NEW] Reply feature ---
+  replyingToMsg: ChatMessage | null = null;
+
+  // --- [NEW] Inline Action Buttons ---
+  hoveredMessageId: string | null = null;
+  longPressMessageId: string | null = null;
+
   // --- Long press (mobile) for reactions ---
   pressTimer: any = null;
   longPressDuration = 500;
@@ -296,7 +308,15 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
 
   sendMessage() {
     if (!this.newMessage.trim()) return;
-    this.facade.sendMessage(this.newMessage);
+    
+    // If replying, send with replyToId
+    if (this.replyingToMsg && this.replyingToMsg.id) {
+      this.facade.sendMessage(this.newMessage, this.replyingToMsg.id);
+      this.replyingToMsg = null; // Clear reply after sending
+    } else {
+      this.facade.sendMessage(this.newMessage);
+    }
+    
     this.newMessage = '';
     this.showEmojiPicker = false;
   }
@@ -513,26 +533,34 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
       clearTimeout(this.pressTimer);
       this.pressTimer = null;
     }
+
+    // [NEW] Hide action buttons and close context menu
+    this.hoveredMessageId = null;
+    this.longPressMessageId = null;
+    this.closeContextMenu();
   }
 
   onMouseEnter(msg: ChatMessage) {
     if (!this.isHoverCapable) return;
-    msg.showReactionBar = true;
+    if (msg.messageStatus === 'REVOKED') return; // Don't show actions for revoked messages
+    this.hoveredMessageId = msg.id || null;
   }
 
   onMouseLeave(msg: ChatMessage) {
     if (!this.isHoverCapable) return;
-    msg.showReactionBar = false;
+    this.hoveredMessageId = null;
   }
 
   onTouchStart(msg: ChatMessage) {
-    // Touch devices: long press to show reaction bar (normal tap does nothing)
+    // Touch devices: long press to show action buttons
     this.longPressTriggered = false;
     if (this.pressTimer) clearTimeout(this.pressTimer);
 
     this.pressTimer = setTimeout(() => {
       this.longPressTriggered = true;
-      msg.showReactionBar = true;
+      if (msg.messageStatus !== 'REVOKED') {
+        this.longPressMessageId = msg.id || null;
+      }
     }, this.longPressDuration);
   }
 
@@ -549,6 +577,50 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
       clearTimeout(this.pressTimer);
       this.pressTimer = null;
     }
+    this.longPressMessageId = null;
+  }
+
+  /**
+   * Check if action buttons should be visible for a message
+   */
+  shouldShowActions(msg: ChatMessage): boolean {
+    if (msg.messageStatus === 'REVOKED') return false;
+    return this.hoveredMessageId === msg.id || this.longPressMessageId === msg.id;
+  }
+
+  /**
+   * Open emoji picker for quick reaction (shows the reaction bar)
+   */
+  openQuickReaction(event: Event, msg: ChatMessage) {
+    event.stopPropagation();
+    msg.showReactionBar = true;
+  }
+
+  /**
+   * Open more options menu (three dots menu)
+   */
+  openMoreOptions(event: MouseEvent | TouchEvent, msg: ChatMessage) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    let x: number, y: number;
+    
+    if (event instanceof MouseEvent) {
+      x = event.clientX;
+      y = event.clientY;
+    } else {
+      const touch = event.touches[0] || event.changedTouches[0];
+      x = touch.clientX;
+      y = touch.clientY;
+    }
+    
+    this.contextMenuPosition = { x, y };
+    this.contextMenuMsg = msg;
+    this.contextMenuVisible = true;
+    
+    // Hide action buttons when menu opens
+    this.hoveredMessageId = null;
+    this.longPressMessageId = null;
   }
 
   onReact(message: ChatMessage, emojiType: string) {
@@ -603,6 +675,203 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
 
   getReactionTotal(reactions?: MessageReaction[]) {
     return (reactions || []).length;
+  }
+
+  // --- [NEW] Context Menu Actions ---
+
+  /**
+   * Open context menu on right-click (desktop) or long-press (mobile)
+   */
+  onRightClick(event: MouseEvent, msg: ChatMessage) {
+    // Prevent default browser context menu
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Position the menu at the click location
+    this.contextMenuPosition = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    
+    this.contextMenuMsg = msg;
+    this.contextMenuVisible = true;
+  }
+
+  /**
+   * Handle long-press on mobile for context menu
+   */
+  onLongPress(msg: ChatMessage, event: TouchEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Position menu at touch location
+    const touch = event.touches[0] || event.changedTouches[0];
+    this.contextMenuPosition = {
+      x: touch.clientX,
+      y: touch.clientY
+    };
+    
+    this.contextMenuMsg = msg;
+    this.contextMenuVisible = true;
+  }
+
+  /**
+   * Close context menu
+   */
+  closeContextMenu() {
+    this.contextMenuVisible = false;
+    this.contextMenuMsg = null;
+  }
+
+  /**
+   * Check if the current user can revoke the message
+   */
+  canRevokeMessage(msg: ChatMessage): boolean {
+    return msg.senderId === this.facade.currentUser()?.id && msg.messageStatus !== 'REVOKED';
+  }
+
+  /**
+   * Check if message is text (for copy feature)
+   */
+  isTextMessage(msg: ChatMessage): boolean {
+    return msg.type === MessageType.TEXT;
+  }
+
+  /**
+   * Copy message text to clipboard
+   */
+  handleCopy(msg: ChatMessage) {
+    if (!msg.content) return;
+    
+    navigator.clipboard.writeText(msg.content).then(() => {
+      console.log('✅ [ChatWindow] Message copied to clipboard');
+      // You can show a toast notification here if needed
+    }).catch(err => {
+      console.error('❌ [ChatWindow] Failed to copy:', err);
+    });
+    
+    this.closeContextMenu();
+  }
+
+  /**
+   * Reply to a message
+   */
+  handleReply(msg: ChatMessage) {
+    this.replyingToMsg = msg;
+    this.closeContextMenu();
+    
+    // Focus on the input field
+    setTimeout(() => {
+      const textarea = document.querySelector('.message-input') as HTMLTextAreaElement;
+      textarea?.focus();
+    }, 100);
+  }
+
+  /**
+   * Cancel reply
+   */
+  cancelReply() {
+    this.replyingToMsg = null;
+  }
+
+  /**
+   * Revoke/unsend a message (with confirmation)
+   */
+  handleRevoke(msg: ChatMessage) {
+    if (!this.canRevokeMessage(msg)) return;
+    
+    // Show confirmation dialog
+    const confirmed = confirm('Tin nhắn này sẽ bị thu hồi ở cả 2 phía. Bạn có chắc không?');
+    
+    if (!confirmed) {
+      this.closeContextMenu();
+      return;
+    }
+    
+    const chatId = msg.chatId || this.facade.selectedSession()?.id;
+    if (!msg.id || !chatId) {
+      console.error('❌ [ChatWindow] Missing messageId or chatId for revoke');
+      this.closeContextMenu();
+      return;
+    }
+    
+    // Send revoke request via WebSocket
+    const success = this.chatService.revokeMessage(msg.id, chatId);
+    
+    if (success) {
+      console.log('🚫 [ChatWindow] Revoke request sent for message:', msg.id);
+      // Optimistically update UI
+      this.facade.messages.update(msgs => 
+        msgs.map(m => m.id === msg.id ? { ...m, messageStatus: 'REVOKED' } : m)
+      );
+    } else {
+      console.error('❌ [ChatWindow] Failed to send revoke request');
+    }
+    
+    this.closeContextMenu();
+  }
+
+  /**
+   * Delete message for current user only (with confirmation)
+   */
+  handleDeleteForMe(msg: ChatMessage) {
+    // Show confirmation dialog
+    const confirmed = confirm('Tin nhắn này sẽ chỉ bị xóa ở phía bạn. Người khác vẫn xem được. Bạn có chắc không?');
+    
+    if (!confirmed) {
+      this.closeContextMenu();
+      return;
+    }
+    
+    const userId = this.facade.currentUser()?.id;
+    if (!msg.id || !userId) {
+      console.error('❌ [ChatWindow] Missing messageId or userId for delete');
+      this.closeContextMenu();
+      return;
+    }
+
+    // Check if message is temporary (not yet saved to backend)
+    if (msg.id.startsWith('temp_')) {
+      console.log('🗑️ [ChatWindow] Deleting temporary message locally:', msg.id);
+      // Just remove from UI for temporary messages
+      this.facade.messages.update(msgs => msgs.filter(m => m.id !== msg.id));
+      this.closeContextMenu();
+      return;
+    }
+    
+    // Call delete API for persisted messages
+    this.chatService.deleteMessageForMe(msg.id, userId).subscribe({
+      next: () => {
+        console.log('🗑️ [ChatWindow] Message deleted for user:', userId);
+        
+        // Remove from UI immediately
+        this.facade.messages.update(msgs => msgs.filter(m => m.id !== msg.id));
+      },
+      error: (err) => {
+        console.error('❌ [ChatWindow] Failed to delete message:', err);
+        alert('Không thể xóa tin nhắn. Vui lòng thử lại.');
+      }
+    });
+    
+    this.closeContextMenu();
+  }
+
+  /**
+   * Get the message content for reply preview
+   */
+  getReplyPreview(msg: ChatMessage): string {
+    if (msg.type === MessageType.TEXT) {
+      return msg.content.length > 50 ? msg.content.substring(0, 50) + '...' : msg.content;
+    } else if (msg.type === MessageType.IMAGE) {
+      return '📷 Image';
+    } else if (msg.type === MessageType.VIDEO) {
+      return '🎥 Video';
+    } else if (msg.type === MessageType.AUDIO) {
+      return '🎤 Voice message';
+    } else if (msg.type === MessageType.FILE) {
+      return `📎 ${msg.fileName || 'File'}`;
+    }
+    return msg.content;
   }
 
   onFileSelected(event: any) {

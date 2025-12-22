@@ -36,6 +36,16 @@ export interface ChatMessage {
   showReactionBar?: boolean;
   // UI-only helper (custom audio player state)
   isPlaying?: boolean;
+  
+  // [NEW] Reply feature
+  replyToId?: string;   // ID of the message being replied to
+  replyToMessage?: ChatMessage; // UI-only: The full message object being replied to (for display)
+  
+  // [NEW] Message revoke status
+  messageStatus?: 'SENT' | 'REVOKED'; // null or 'SENT' means normal, 'REVOKED' means unsent
+  
+  // [NEW] Delete for me feature (UI doesn't need this, backend filters it out)
+  deletedForUsers?: string[];
 }
 
 // 3. Interface Chat Room (Mapping trực tiếp từ JSON API Backend)

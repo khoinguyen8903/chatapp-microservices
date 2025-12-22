@@ -67,6 +67,8 @@ public class ChatController {
                                     .fileName(savedMsg.getFileName()) // Include original filename
                                     .type(savedMsg.getType())
                                     .status(savedMsg.getStatus())
+                                    .replyToId(savedMsg.getReplyToId()) // [NEW] Include reply info
+                                    .messageStatus(savedMsg.getMessageStatus()) // [NEW] Include revoke status
                                     .build()
                     );
                 }
@@ -93,6 +95,8 @@ public class ChatController {
                         .fileName(savedMsg.getFileName()) // Include original filename
                         .type(savedMsg.getType())
                         .status(savedMsg.getStatus())
+                        .replyToId(savedMsg.getReplyToId()) // [NEW] Include reply info
+                        .messageStatus(savedMsg.getMessageStatus()) // [NEW] Include revoke status
                         .build();
 
                 messagingTemplate.convertAndSend("/topic/" + chatMessage.getRecipientId(), notification);
@@ -139,6 +143,42 @@ public class ChatController {
             messagingTemplate.convertAndSend("/topic/chat/" + chatId, updated);
         } catch (Exception e) {
             System.err.println("❌ [ChatController] Error in reactToMessage: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * [NEW] Revoke/unsend a message (visible to everyone in the chat).
+     * Frontend sends via WebSocket: { messageId, chatId }
+     * Backend broadcasts updated message with messageStatus = 'REVOKED' to: /topic/chat/{chatId}
+     */
+    @MessageMapping("/chat.revoke")
+    public void revokeMessage(@Payload Map<String, String> payload) {
+        try {
+            String messageId = payload.get("messageId");
+            String chatId = payload.get("chatId");
+            
+            System.out.println("🚫 [ChatController] Revoke request - MessageId: " + messageId + ", ChatId: " + chatId);
+
+            if (messageId == null || chatId == null) {
+                System.out.println("⚠️ [ChatController] /chat.revoke missing fields");
+                return;
+            }
+
+            // Update message status to REVOKED
+            ChatMessage revokedMessage = chatMessageService.revokeMessage(messageId);
+            
+            if (revokedMessage == null) {
+                System.out.println("⚠️ [ChatController] Message not found: " + messageId);
+                return;
+            }
+
+            // Broadcast the revoked message to all users in the chat room
+            System.out.println("✅ [ChatController] Message revoked. Broadcasting to: /topic/chat/" + chatId);
+            messagingTemplate.convertAndSend("/topic/chat/" + chatId, revokedMessage);
+            
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error in revokeMessage: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -304,6 +344,43 @@ public class ChatController {
             ));
         } catch (Exception e) {
             System.err.println("❌ [ChatController] Error marking messages as read: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * [NEW] Delete message for current user only (others can still see it).
+     * Adds the user's ID to the message's deletedForUsers list.
+     * Frontend sends: POST /messages/delete/{messageId}/{userId}
+     */
+    @PostMapping("/messages/delete/{messageId}/{userId}")
+    public ResponseEntity<Map<String, Object>> deleteMessageForMe(
+            @PathVariable String messageId,
+            @PathVariable String userId) {
+        try {
+            System.out.println("🗑️ [ChatController] Delete for me - MessageId: " + messageId + ", UserId: " + userId);
+            
+            ChatMessage updatedMessage = chatMessageService.deleteMessageForUser(messageId, userId);
+            
+            if (updatedMessage == null) {
+                return ResponseEntity.status(404).body(Map.of(
+                        "success", false,
+                        "error", "Message not found"
+                ));
+            }
+            
+            System.out.println("✅ [ChatController] Message deleted for user: " + userId);
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Message deleted for you successfully"
+            ));
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error deleting message for user: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of(
                     "success", false,

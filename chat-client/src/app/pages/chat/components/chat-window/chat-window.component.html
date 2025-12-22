@@ -126,7 +126,9 @@
         <article 
           class="message-wrapper"
           [class.sent]="msg.senderId === facade.currentUser().id"
-          [class.received]="msg.senderId !== facade.currentUser().id">
+          [class.received]="msg.senderId !== facade.currentUser().id"
+          (mouseenter)="onMouseEnter(msg)"
+          (mouseleave)="onMouseLeave(msg)">
           
           <div class="message-content-wrapper">
             <!-- Group sender name -->
@@ -142,14 +144,50 @@
               [class.bubble-sent]="msg.senderId === facade.currentUser().id"
               [class.bubble-received]="msg.senderId !== facade.currentUser().id"
               [class.has-reactions]="msg.reactions && msg.reactions.length > 0"
-              (mouseenter)="onMouseEnter(msg)"
-              (mouseleave)="onMouseLeave(msg)"
+              [class.revoked]="msg.messageStatus === 'REVOKED'"
               (touchstart)="onTouchStart(msg)"
               (touchend)="onTouchEnd(msg)"
               (touchcancel)="onTouchCancel(msg)">
 
-              <!-- Reaction Bar -->
-              @if (msg.showReactionBar) {
+              <!-- [NEW] Inline Action Buttons -->
+              @if (shouldShowActions(msg)) {
+                <div 
+                  class="message-actions"
+                  [class.actions-sent]="msg.senderId === facade.currentUser().id"
+                  [class.actions-received]="msg.senderId !== facade.currentUser().id"
+                  (click)="$event.stopPropagation()">
+                  
+                  <!-- Emoji/Reaction Button -->
+                  <button 
+                    class="action-btn emoji-btn"
+                    (click)="openQuickReaction($event, msg)"
+                    type="button"
+                    title="React">
+                    <i class="far fa-smile"></i>
+                  </button>
+
+                  <!-- Reply Button -->
+                  <button 
+                    class="action-btn reply-btn"
+                    (click)="handleReply(msg); hoveredMessageId = null; longPressMessageId = null"
+                    type="button"
+                    title="Reply">
+                    <i class="fas fa-reply"></i>
+                  </button>
+
+                  <!-- More Options Button (Three Dots) -->
+                  <button 
+                    class="action-btn more-btn"
+                    (click)="openMoreOptions($event, msg)"
+                    type="button"
+                    title="More options">
+                    <i class="fas fa-ellipsis-h"></i>
+                  </button>
+                </div>
+              }
+
+              <!-- Reaction Bar (Emoji Picker) -->
+              @if (msg.showReactionBar && msg.messageStatus !== 'REVOKED') {
                 <div class="reaction-bar" (click)="$event.stopPropagation()">
                   <button class="reaction-item" (click)="onReact(msg, '❤️')" type="button">❤️</button>
                   <button class="reaction-item" (click)="onReact(msg, '😆')" type="button">😆</button>
@@ -158,8 +196,52 @@
                   <button class="reaction-item" (click)="onReact(msg, '👍')" type="button">👍</button>
                 </div>
               }
+
+              <!-- [NEW] Revoked Message Display -->
+              @if (msg.messageStatus === 'REVOKED') {
+                <div class="revoked-content">
+                  <i class="fas fa-ban"></i>
+                  <span class="revoked-text">Tin nhắn đã bị thu hồi</span>
+                </div>
+              }
+
+              <!-- [NEW] Reply Quote (if this message is a reply) -->
+              @if (msg.replyToId && msg.messageStatus !== 'REVOKED' && msg.replyToMessage) {
+                <div class="reply-quote">
+                  <div class="reply-quote-bar"></div>
+                  <div class="reply-quote-content">
+                    <!-- Show sender name if in group chat -->
+                    @if (facade.selectedSession()?.type === 'GROUP') {
+                      <span class="reply-sender">{{ msg.replyToMessage.senderName || 'Someone' }}</span>
+                    }
+                    
+                    <!-- Show replied-to message content based on type -->
+                    @if (msg.replyToMessage.type === MessageType.TEXT) {
+                      <span class="reply-quote-text">{{ msg.replyToMessage.content }}</span>
+                    } @else if (msg.replyToMessage.type === MessageType.IMAGE) {
+                      <span class="reply-quote-text">
+                        <i class="fas fa-image"></i> Photo
+                      </span>
+                    } @else if (msg.replyToMessage.type === MessageType.VIDEO) {
+                      <span class="reply-quote-text">
+                        <i class="fas fa-video"></i> Video
+                      </span>
+                    } @else if (msg.replyToMessage.type === MessageType.AUDIO) {
+                      <span class="reply-quote-text">
+                        <i class="fas fa-microphone"></i> Voice message
+                      </span>
+                    } @else if (msg.replyToMessage.type === MessageType.FILE) {
+                      <span class="reply-quote-text">
+                        <i class="fas fa-file"></i> {{ msg.replyToMessage.fileName || 'File' }}
+                      </span>
+                    }
+                  </div>
+                </div>
+              }
               
-              <!-- Image Message -->
+              <!-- Message Content (only if not revoked) -->
+              @if (msg.messageStatus !== 'REVOKED') {
+                <!-- Image Message -->
               @if (msg.type === MessageType.IMAGE) {
                 <div class="attachment-image">
                   <img 
@@ -270,6 +352,7 @@
               @else {
                 <p class="message-text">{{ msg.content }}</p>
               }
+              } <!-- End of: if not revoked -->
 
               <!-- Reactions Display (pill, slightly outside bubble) -->
               @if (msg.reactions && msg.reactions.length > 0) {
@@ -318,6 +401,23 @@
 
   <!-- INPUT: Fixed height, never shrinks -->
   <footer class="chat-input-area">
+    <!-- [NEW] Reply Banner -->
+    @if (replyingToMsg) {
+      <div class="reply-banner">
+        <div class="reply-banner-content">
+          <div class="reply-label">Đang trả lời:</div>
+          <div class="reply-preview">{{ getReplyPreview(replyingToMsg) }}</div>
+        </div>
+        <button 
+          (click)="cancelReply()" 
+          class="reply-cancel-btn"
+          type="button"
+          aria-label="Cancel reply">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    }
+
     <div class="input-wrapper">
       @if (showEmojiPicker && !isRecording) {
         <div class="emoji-picker-popover">
@@ -419,5 +519,47 @@
       }
     </div>
   </footer>
+
+  <!-- [NEW] Context Menu Overlay -->
+  @if (contextMenuVisible && contextMenuMsg) {
+    <div 
+      class="context-menu-overlay" 
+      (click)="closeContextMenu()">
+    </div>
+    <ul 
+      class="context-menu"
+      [style.left.px]="contextMenuPosition.x"
+      [style.top.px]="contextMenuPosition.y"
+      (click)="$event.stopPropagation()">
+      
+      <!-- Reply Option (Always visible) -->
+      <li (click)="handleReply(contextMenuMsg)" class="context-menu-item">
+        <i class="fas fa-reply"></i>
+        <span>Trả lời</span>
+      </li>
+      
+      <!-- Copy Option (Only for text messages) -->
+      @if (isTextMessage(contextMenuMsg)) {
+        <li (click)="handleCopy(contextMenuMsg)" class="context-menu-item">
+          <i class="fas fa-copy"></i>
+          <span>Sao chép</span>
+        </li>
+      }
+      
+      <!-- Revoke Option (Only for own messages that aren't revoked) -->
+      @if (canRevokeMessage(contextMenuMsg)) {
+        <li (click)="handleRevoke(contextMenuMsg)" class="context-menu-item revoke">
+          <i class="fas fa-undo"></i>
+          <span>Thu hồi</span>
+        </li>
+      }
+      
+      <!-- Delete For Me Option (Always visible) -->
+      <li (click)="handleDeleteForMe(contextMenuMsg)" class="context-menu-item delete">
+        <i class="fas fa-trash"></i>
+        <span>Xóa</span>
+      </li>
+    </ul>
+  }
 
 </div>

@@ -266,7 +266,14 @@ export class ChatFacade {
 
       // Nếu đúng session đang mở -> thêm vào list messages
       if (isBelongToCurrentSession) {
-        this.messages.update(old => [...old, msg]);
+        this.messages.update(old => {
+          // [NEW] Populate replyToMessage if this message is a reply
+          if (msg.replyToId) {
+            const replyToMessage = old.find(m => m.id === msg.replyToId);
+            msg.replyToMessage = replyToMessage;
+          }
+          return [...old, msg];
+        });
         this.isRecipientTyping.set(false);
 
         // [CRITICAL FIX] Auto-mark as read when message arrives in currently open chat
@@ -550,7 +557,16 @@ export class ChatFacade {
 
     // Load Messages
     this.chatService.getChatMessages(this.currentUser().id, session.id).subscribe(msgs => {
-      this.messages.set(msgs);
+      // [NEW] Populate replyToMessage for messages that have replyToId
+      const enrichedMessages = msgs.map(msg => {
+        if (msg.replyToId) {
+          // Find the replied-to message in the same message list
+          const replyToMessage = msgs.find(m => m.id === msg.replyToId);
+          return { ...msg, replyToMessage };
+        }
+        return msg;
+      });
+      this.messages.set(enrichedMessages);
     });
   }
 
@@ -572,7 +588,7 @@ export class ChatFacade {
   }
 
   // [UPDATE] Gửi tin nhắn
-  sendMessage(content: string, type: MessageType = MessageType.TEXT, file?: File, fileName?: string) {
+  sendMessage(content: string, replyToId?: string, type: MessageType = MessageType.TEXT, file?: File, fileName?: string) {
     const currentSession = this.selectedSession();
     if (!currentSession) return false;
 
@@ -587,7 +603,8 @@ export class ChatFacade {
         timestamp: new Date(),
         type: type,
         senderName: this.currentUser().username,
-        reactions: []
+        reactions: [],
+        replyToId: replyToId // [NEW] Add replyToId for reply feature
     };
 
     const isSent = this.chatService.sendMessage(msg);
