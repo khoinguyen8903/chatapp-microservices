@@ -92,6 +92,8 @@ export interface ChatSession {
   // Unread message indicators and preview
   lastMessage?: string;  // Preview of the last message
   lastMessageTimestamp?: Date;  // Timestamp of the last message
+  // UI-only: used to sync sidebar preview on message updates (revoke/edit) without relying on timestamps
+  lastMessageId?: string;
   unreadCount: number;   // Number of unread messages
 }
 

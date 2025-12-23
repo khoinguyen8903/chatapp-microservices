@@ -64,6 +64,41 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     typeof window !== 'undefined' &&
     typeof window.matchMedia !== 'undefined' &&
     window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+  // --- Context menu UX helpers ---
+  private isMobileViewport(): boolean {
+    // Mobile breakpoint requested: <= 768
+    // Also treat non-hover devices as "mobile-like" (touch-first)
+    return (typeof window !== 'undefined' && window.innerWidth <= 768) || !this.isHoverCapable;
+  }
+
+  get menuStyle(): Record<string, any> {
+    // Mobile: bottom sheet positioning is handled via CSS only
+    if (this.isMobileViewport()) return {};
+    return {
+      left: `${this.contextMenuPosition.x}px`,
+      top: `${this.contextMenuPosition.y}px`
+    };
+  }
+
+  private clampToViewport(pos: { x: number; y: number }): { x: number; y: number } {
+    // Keep menu inside viewport on desktop to avoid overflow/jumping.
+    // Use a conservative estimate for menu size (it varies based on options).
+    const menuW = 240;
+    const menuH = 240;
+    const margin = 12;
+
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
+
+    const maxX = Math.max(margin, vw - menuW - margin);
+    const maxY = Math.max(margin, vh - menuH - margin);
+
+    return {
+      x: Math.min(Math.max(pos.x, margin), maxX),
+      y: Math.min(Math.max(pos.y, margin), maxY)
+    };
+  }
   
   // Expose enums to template
   MessageType = MessageType;
@@ -492,7 +527,6 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
             content: url,
             fileName,
             type: MessageType.AUDIO,
-            id: `temp_${Date.now()}`,
             timestamp: new Date(),
             senderName: this.facade.currentUser().username,
             reactions: []
@@ -552,6 +586,10 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   }
 
   onTouchStart(msg: ChatMessage) {
+    // Mobile: we now open message menu on single tap (bottom sheet),
+    // so don't start long-press timers that feel buggy.
+    if (this.isMobileViewport()) return;
+
     // Touch devices: long press to show action buttons
     this.longPressTriggered = false;
     if (this.pressTimer) clearTimeout(this.pressTimer);
@@ -602,19 +640,21 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   openMoreOptions(event: MouseEvent | TouchEvent, msg: ChatMessage) {
     event.preventDefault();
     event.stopPropagation();
-    
-    let x: number, y: number;
-    
-    if (event instanceof MouseEvent) {
-      x = event.clientX;
-      y = event.clientY;
-    } else {
-      const touch = event.touches[0] || event.changedTouches[0];
-      x = touch.clientX;
-      y = touch.clientY;
+
+    // Desktop: place menu near pointer; Mobile: bottom sheet (CSS handles position).
+    if (!this.isMobileViewport()) {
+      let x: number, y: number;
+      if (event instanceof MouseEvent) {
+        x = event.clientX;
+        y = event.clientY;
+      } else {
+        const touch = event.touches[0] || event.changedTouches[0];
+        x = touch.clientX;
+        y = touch.clientY;
+      }
+      this.contextMenuPosition = this.clampToViewport({ x, y });
     }
-    
-    this.contextMenuPosition = { x, y };
+
     this.contextMenuMsg = msg;
     this.contextMenuVisible = true;
     
@@ -683,15 +723,15 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
    * Open context menu on right-click (desktop) or long-press (mobile)
    */
   onRightClick(event: MouseEvent, msg: ChatMessage) {
+    // Desktop only: Mobile uses tap-to-open bottom sheet.
+    if (this.isMobileViewport()) return;
+
     // Prevent default browser context menu
     event.preventDefault();
     event.stopPropagation();
     
     // Position the menu at the click location
-    this.contextMenuPosition = {
-      x: event.clientX,
-      y: event.clientY
-    };
+    this.contextMenuPosition = this.clampToViewport({ x: event.clientX, y: event.clientY });
     
     this.contextMenuMsg = msg;
     this.contextMenuVisible = true;
@@ -701,6 +741,9 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
    * Handle long-press on mobile for context menu
    */
   onLongPress(msg: ChatMessage, event: TouchEvent) {
+    // Mobile: long-press-to-open is deprecated in favor of single tap.
+    if (this.isMobileViewport()) return;
+
     event.preventDefault();
     event.stopPropagation();
     
@@ -713,6 +756,36 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     
     this.contextMenuMsg = msg;
     this.contextMenuVisible = true;
+  }
+
+  /**
+   * Mobile: open menu on single tap (bottom sheet).
+   * Desktop: do nothing (right-click handles it).
+   */
+  onMobileMessageClick(event: MouseEvent, msg: ChatMessage) {
+    if (!this.isMobileViewport()) return;
+
+    // Ignore taps on interactive elements inside the message bubble
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, a, input, textarea, audio, video, .reaction-bar, .message-actions, .emoji-picker-popover, .context-menu')) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Toggle: tapping the same message closes the menu
+    if (this.contextMenuVisible && this.contextMenuMsg?.id && msg?.id && this.contextMenuMsg.id === msg.id) {
+      this.closeContextMenu();
+      return;
+    }
+
+    this.contextMenuMsg = msg;
+    this.contextMenuVisible = true;
+
+    // Hide action buttons when menu opens
+    this.hoveredMessageId = null;
+    this.longPressMessageId = null;
   }
 
   /**
@@ -800,10 +873,21 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     
     if (success) {
       console.log('🚫 [ChatWindow] Revoke request sent for message:', msg.id);
+      const before = this.facade.messages();
+      const wasLast = !!before.length && !!before[before.length - 1]?.id && before[before.length - 1]?.id === msg.id;
+
       // Optimistically update UI
       this.facade.messages.update(msgs => 
         msgs.map(m => m.id === msg.id ? { ...m, messageStatus: 'REVOKED' } : m)
       );
+
+      // Sync sidebar immediately if this was the latest message in the current chat
+      if (wasLast) {
+        const sessionId = this.facade.selectedSession()?.id;
+        if (sessionId) {
+          this.chatService.updateChatRoomPreview(sessionId, { ...msg, messageStatus: 'REVOKED' });
+        }
+      }
     } else {
       console.error('❌ [ChatWindow] Failed to send revoke request');
     }
@@ -829,25 +913,54 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
       this.closeContextMenu();
       return;
     }
-
-    // Check if message is temporary (not yet saved to backend)
-    if (msg.id.startsWith('temp_')) {
-      console.log('🗑️ [ChatWindow] Deleting temporary message locally:', msg.id);
-      // Just remove from UI for temporary messages
-      this.facade.messages.update(msgs => msgs.filter(m => m.id !== msg.id));
-      this.closeContextMenu();
-      return;
-    }
     
     // Call delete API for persisted messages
     this.chatService.deleteMessageForMe(msg.id, userId).subscribe({
       next: () => {
         console.log('🗑️ [ChatWindow] Message deleted for user:', userId);
-        
-        // Remove from UI immediately
-        this.facade.messages.update(msgs => msgs.filter(m => m.id !== msg.id));
+
+        // Sync sidebar preview only if the deleted message was the last one in this chat
+        const before = this.facade.messages();
+        const wasLast = !!before.length && !!before[before.length - 1]?.id && before[before.length - 1]?.id === msg.id;
+
+        let newLastMsg: ChatMessage | null = null;
+        this.facade.messages.update((msgs) => {
+          const next = msgs.filter(m => m.id !== msg.id);
+          newLastMsg = next[next.length - 1] || null;
+          return next;
+        });
+
+        if (wasLast) {
+          const sessionId = this.facade.selectedSession()?.id;
+          if (sessionId) {
+            this.chatService.updateChatRoomPreview(sessionId, newLastMsg);
+          }
+        }
       },
       error: (err) => {
+        // Some legacy messages were persisted with id like "temp_...", and some truly-local messages
+        // might still exist. If backend says not found, remove locally as a fallback.
+        if (err?.status === 404) {
+          console.warn('⚠️ [ChatWindow] Delete API returned 404 - removing locally as fallback:', msg.id);
+          const before = this.facade.messages();
+          const wasLast = !!before.length && !!before[before.length - 1]?.id && before[before.length - 1]?.id === msg.id;
+
+          let newLastMsg: ChatMessage | null = null;
+          this.facade.messages.update((msgs) => {
+            const next = msgs.filter(m => m.id !== msg.id);
+            newLastMsg = next[next.length - 1] || null;
+            return next;
+          });
+
+          if (wasLast) {
+            const sessionId = this.facade.selectedSession()?.id;
+            if (sessionId) {
+              this.chatService.updateChatRoomPreview(sessionId, newLastMsg);
+            }
+          }
+          return;
+        }
+
         console.error('❌ [ChatWindow] Failed to delete message:', err);
         alert('Không thể xóa tin nhắn. Vui lòng thử lại.');
       }
@@ -887,7 +1000,8 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
             else if (file.type.startsWith('video/')) type = MessageType.VIDEO;
             
             // Pass the fileName from backend response
-            this.facade.sendMessage(url, type, undefined, fileName);
+            // sendMessage(content, replyToId?, type?, file?, fileName?)
+            this.facade.sendMessage(url, undefined, type, undefined, fileName);
         },
         error: (err) => console.error('Upload failed', err)
       });

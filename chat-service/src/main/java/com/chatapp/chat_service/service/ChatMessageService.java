@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -24,6 +25,13 @@ public class ChatMessageService {
     @Autowired private NotificationClient notificationClient;
 
     public ChatMessage save(ChatMessage chatMessage, String senderName) {
+        // [CRITICAL] Never persist client-side temporary IDs like "temp_..."
+        // Mongo will use any provided @Id value as the document _id.
+        if (chatMessage.getId() != null && chatMessage.getId().startsWith("temp_")) {
+            System.out.println("⚠️ [ChatMessageService] Clearing temporary client id before save: " + chatMessage.getId());
+            chatMessage.setId(null);
+        }
+
         // 1. Logic tạo Chat ID nếu chưa có
         if (chatMessage.getChatId() == null || chatMessage.getChatId().isEmpty()) {
             var chatId = chatRoomService
@@ -73,6 +81,11 @@ public class ChatMessageService {
 
     // [NEW] Generate message preview based on type
     private String generateMessagePreview(ChatMessage message) {
+        // If message is revoked, always show revoked preview
+        if ("REVOKED".equals(message.getMessageStatus())) {
+            return "🚫 Tin nhắn đã bị thu hồi";
+        }
+
         MessageType type = message.getType();
         
         if (type == MessageType.TEXT) {
@@ -207,7 +220,24 @@ public class ChatMessageService {
         message.setMessageStatus("REVOKED");
         
         System.out.println("🚫 [ChatMessageService] Revoking message: " + messageId);
-        return repository.save(message);
+        ChatMessage saved = repository.save(message);
+
+        // Update sidebar preview only if this message is the latest for this chat
+        try {
+            chatRoomService.findByChatId(saved.getChatId()).ifPresent(room -> {
+                Date lastTs = room.getLastMessageTimestamp();
+                Date msgTs = saved.getTimestamp();
+                if (lastTs != null && msgTs != null && lastTs.after(msgTs)) {
+                    // A newer message exists; don't overwrite last preview
+                    return;
+                }
+                updateChatRoomLastMessage(saved);
+            });
+        } catch (Exception e) {
+            System.err.println("❌ [ChatMessageService] Failed to update lastMessage on revoke: " + e.getMessage());
+        }
+
+        return saved;
     }
 
     /**

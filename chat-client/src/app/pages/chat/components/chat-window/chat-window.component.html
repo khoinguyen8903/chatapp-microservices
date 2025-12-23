@@ -127,6 +127,8 @@
           class="message-wrapper"
           [class.sent]="msg.senderId === facade.currentUser().id"
           [class.received]="msg.senderId !== facade.currentUser().id"
+          (contextmenu)="onRightClick($event, msg)"
+          (click)="onMobileMessageClick($event, msg)"
           (mouseenter)="onMouseEnter(msg)"
           (mouseleave)="onMouseLeave(msg)">
           
@@ -522,14 +524,10 @@
 
   <!-- [NEW] Context Menu Overlay -->
   @if (contextMenuVisible && contextMenuMsg) {
-    <div 
-      class="context-menu-overlay" 
-      (click)="closeContextMenu()">
-    </div>
+    <div class="menu-backdrop" (click)="closeContextMenu()"></div>
     <ul 
       class="context-menu"
-      [style.left.px]="contextMenuPosition.x"
-      [style.top.px]="contextMenuPosition.y"
+      [ngStyle]="menuStyle"
       (click)="$event.stopPropagation()">
       
       <!-- Reply Option (Always visible) -->

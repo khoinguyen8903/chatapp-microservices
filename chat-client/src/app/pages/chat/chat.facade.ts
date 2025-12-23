@@ -152,6 +152,148 @@ export class ChatFacade {
     return value;
   }
 
+  private buildSidebarPreview(msg: ChatMessage): { text?: string; timestamp?: Date; id?: string } {
+    if (!msg) return {};
+
+    // Sidebar text preview
+    let text: string | undefined;
+    if (msg.messageStatus === 'REVOKED') {
+      // Requirement: exact string (no emoji)
+      text = 'Tin nhắn đã thu hồi';
+    } else if (msg.type === MessageType.IMAGE) {
+      text = '📷 Image';
+    } else if (msg.type === MessageType.VIDEO) {
+      text = '🎥 Video';
+    } else if (msg.type === MessageType.FILE) {
+      text = `📎 ${msg.fileName || 'File'}`;
+    } else if (msg.type === MessageType.AUDIO) {
+      text = '🎤 Voice message';
+    } else {
+      text = this.formatLastMessagePreview(msg.content);
+    }
+
+    const timestamp = msg.timestamp ? new Date(msg.timestamp) : new Date();
+    const id = msg.id;
+    return { text, timestamp, id };
+  }
+
+  private resolveSessionIdFor(chatIdOrSessionId: string, msg?: ChatMessage): string | null {
+    if (!chatIdOrSessionId) return null;
+
+    // Fast path: caller already passed sidebar session id
+    const direct = this.sessions().find(s => s.id === chatIdOrSessionId);
+    if (direct) return direct.id;
+
+    // Preferred: map real room chatId -> sidebar session id via rawRooms
+    const currentUserId = this.currentUser()?.id;
+    const matchingRoom = this.rawRooms().find(r => r.chatId === chatIdOrSessionId);
+    if (matchingRoom && currentUserId) {
+      return matchingRoom.isGroup
+        ? matchingRoom.chatId
+        : (matchingRoom.senderId === currentUserId ? matchingRoom.recipientId : matchingRoom.senderId);
+    }
+
+    // Fallback (rawRooms not ready): derive partnerId from message participants
+    if (msg && currentUserId) {
+      // Group chat: session id is chatId (groupId)
+      const groupSession = this.sessions().find(s => s.type === 'GROUP' && s.id === chatIdOrSessionId);
+      if (groupSession) return chatIdOrSessionId;
+
+      // Private: session id is partnerId
+      const partnerId = msg.senderId === currentUserId ? msg.recipientId : msg.senderId;
+      const privateSession = this.sessions().find(s => s.type === 'PRIVATE' && s.id === partnerId);
+      return privateSession ? partnerId : null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Update sidebar preview in-place WITHOUT reloading rooms API.
+   * Accepts either:
+   * - sidebar session id (PRIVATE: partnerId, GROUP: groupId)
+   * - backend room chatId (for PRIVATE chats)
+   */
+  updateChatRoomPreview(chatIdOrSessionId: string, lastMessage: ChatMessage | null) {
+    const sessionId = this.resolveSessionIdFor(chatIdOrSessionId, lastMessage || undefined);
+    if (!sessionId) {
+      console.warn('⚠️ [Facade] updateChatRoomPreview - cannot resolve session id for:', chatIdOrSessionId);
+      return;
+    }
+
+    const preview = lastMessage ? this.buildSidebarPreview(lastMessage) : {};
+
+    this.sessions.update((sessions) => {
+      return sessions.map((session) => {
+        if (session.id !== sessionId) return session;
+
+        const updatedSession = { ...session };
+        updatedSession.lastMessage = preview.text;
+        updatedSession.lastMessageTimestamp = preview.timestamp;
+        updatedSession.lastMessageId = preview.id;
+
+        // Do NOT touch unreadCount here (caller controls unread logic)
+        return updatedSession;
+      }).sort((a, b) => {
+        const timeA = a.lastMessageTimestamp?.getTime() || 0;
+        const timeB = b.lastMessageTimestamp?.getTime() || 0;
+        return timeB - timeA;
+      });
+    });
+  }
+
+  private syncChatRoomPreviewIfLatest(updated: ChatMessage) {
+    if (!updated?.id || !updated.chatId) return;
+
+    const sessionId = this.resolveSessionIdFor(updated.chatId, updated);
+    if (!sessionId) return;
+
+    const session = this.sessions().find(s => s.id === sessionId);
+    const bySidebarId = !!session?.lastMessageId && session.lastMessageId === updated.id;
+    const byTimestampNear = (() => {
+      // Fallback for sessions hydrated from API (no lastMessageId):
+      // if the updated message timestamp matches the session's lastMessageTimestamp closely,
+      // treat it as the last message and sync preview.
+      if (bySidebarId) return false;
+      const sTs = session?.lastMessageTimestamp ? new Date(session.lastMessageTimestamp).getTime() : 0;
+      const uTs = updated.timestamp ? new Date(updated.timestamp).getTime() : 0;
+      if (!sTs || !uTs) return false;
+      return Math.abs(sTs - uTs) <= 2 * 60 * 1000; // 2 minutes tolerance
+    })();
+
+    // If this update belongs to the currently open chat, we can verify via loaded message list
+    const currentSession = this.selectedSession();
+    let byActiveMessages = false;
+    if (currentSession) {
+      const currentUserId = this.currentUser()?.id;
+      let activeChatId: string | null = null;
+      if (currentUserId) {
+        if (currentSession.type === 'GROUP') {
+          activeChatId = currentSession.id;
+        } else {
+          const privateRoom = this.rawRooms().find(room =>
+            !room.isGroup &&
+            (
+              (room.senderId === currentUserId && room.recipientId === currentSession.id) ||
+              (room.senderId === currentSession.id && room.recipientId === currentUserId)
+            )
+          );
+          activeChatId = privateRoom ? privateRoom.chatId : currentSession.id;
+        }
+      }
+
+      if (activeChatId && updated.chatId === activeChatId) {
+        const msgs = this.messages();
+        const last = msgs[msgs.length - 1];
+        byActiveMessages = !!last?.id && last.id === updated.id;
+      }
+    }
+
+    if (bySidebarId || byActiveMessages || byTimestampNear) {
+      this.updateChatRoomPreview(updated.chatId, updated);
+    }
+  }
+
   // Hàm này được gọi từ ChatComponent (ngOnInit)
   init() {
     const current = this.authService.getCurrentUser();
@@ -385,26 +527,86 @@ export class ChatFacade {
       if (!updated?.id) return;
       console.log('🔁 [Facade] Received message update:', updated);
 
-      // Update existing message by ID (replace), otherwise append
+      // Only mutate the currently open message list if this update belongs to the active chat.
+      // We still want to update sidebar preview even for inactive chats.
+      const currentSession = this.selectedSession();
+      const currentUserId = this.currentUser()?.id;
+      let activeChatId: string | null = null;
+      if (currentSession && currentUserId) {
+        if (currentSession.type === 'GROUP') {
+          activeChatId = currentSession.id;
+        } else {
+          const privateRoom = this.rawRooms().find(room =>
+            !room.isGroup &&
+            (
+              (room.senderId === currentUserId && room.recipientId === currentSession.id) ||
+              (room.senderId === currentSession.id && room.recipientId === currentUserId)
+            )
+          );
+          activeChatId = privateRoom ? privateRoom.chatId : currentSession.id;
+        }
+      }
+
+      const isForActiveChat = !!activeChatId && !!updated.chatId && updated.chatId === activeChatId;
+
+      // Sidebar sync for updates (revoke/edit/react):
+      // Only update preview if this updated message is currently the latest message for that chat.
+      // This avoids timestamp-based false negatives (client-time vs server-time) and avoids
+      // showing "unsent" for older messages.
+      this.syncChatRoomPreviewIfLatest(updated);
+
+      // Update existing message by ID (MERGE) regardless of chat matching.
+      // This ensures revoke/react updates apply immediately even if rawRooms isn't ready yet
+      // (activeChatId fallback might be partnerId, while updated.chatId is real chatId).
+      //
+      // Only APPEND a missing message if it belongs to the active chat.
+      // IMPORTANT: room update payloads can be partial (e.g., reactions-only, revoke-only),
+      // so replacing would drop UI-only fields and/or reply/revoke data.
       this.messages.update((msgs) => {
         const idx = msgs.findIndex(m => m.id === updated.id);
         if (idx === -1) {
-          return [...msgs, updated];
+          return isForActiveChat ? [...msgs, updated] : msgs;
+        }
+
+        const current = msgs[idx];
+
+        // Merge carefully to avoid overwriting existing values with undefined
+        const merged = {
+          ...current,
+          ...updated,
+          // preserve potentially-missing server fields
+          content: updated.content ?? current.content,
+          fileName: updated.fileName ?? current.fileName,
+          type: updated.type ?? current.type,
+          status: updated.status ?? current.status,
+          senderName: updated.senderName ?? current.senderName,
+          reactions: (updated.reactions ?? current.reactions) as any,
+          replyToId: updated.replyToId ?? current.replyToId,
+          messageStatus: updated.messageStatus ?? current.messageStatus,
+          timestamp: updated.timestamp ?? current.timestamp,
+          // preserve UI-only state
+          showReactionBar: current.showReactionBar,
+          isPlaying: current.isPlaying,
+          replyToMessage: current.replyToMessage
+        };
+
+        // If this is a reply and we don't have the quoted message loaded yet, try to resolve it.
+        if (merged.replyToId && !merged.replyToMessage) {
+          merged.replyToMessage = msgs.find(m => m.id === merged.replyToId);
         }
 
         const next = msgs.slice();
-        next[idx] = {
-          ...updated,
-          // preserve UI-only state
-          showReactionBar: msgs[idx].showReactionBar,
-          isPlaying: msgs[idx].isPlaying,
-          // safety: if backend omits reactions for any reason, keep existing
-          reactions: (updated.reactions ?? msgs[idx].reactions) as any
-        };
+        next[idx] = merged as any;
         return next;
       });
     });
     this.subscriptions.add(msgUpdateSub);
+
+    // 6. Sidebar preview updates requested by UI actions (delete-for-me, optimistic revoke, etc.)
+    const previewSub = this.chatService.onChatRoomPreviewUpdate().subscribe(({ chatId, lastMessage }) => {
+      this.updateChatRoomPreview(chatId, lastMessage);
+    });
+    this.subscriptions.add(previewSub);
   }
 
   // --- API CALLS & LOGIC ---
@@ -599,7 +801,6 @@ export class ChatFacade {
         recipientId: currentSession.id, 
         content: finalContent,
         fileName: fileName || (file ? file.name : undefined), // Use provided fileName or extract from file
-        id: `temp_${Date.now()}`,
         timestamp: new Date(),
         type: type,
         senderName: this.currentUser().username,
@@ -719,16 +920,8 @@ export class ChatFacade {
                 'From:', msg.senderId, 'IsCurrent:', isBelongToCurrentSession);
     
     // Prepare message preview (truncate if needed)
-    let messagePreview = msg.content;
-    if (msg.type === MessageType.IMAGE) {
-      messagePreview = '📷 Image';
-    } else if (msg.type === MessageType.VIDEO) {
-      messagePreview = '🎥 Video';
-    } else if (msg.type === MessageType.FILE) {
-      messagePreview = `📎 ${msg.fileName || 'File'}`;
-    } else if (msg.type === MessageType.AUDIO) {
-      messagePreview = '🎤 Voice message';
-    }
+    const preview = this.buildSidebarPreview(msg);
+    const messagePreview = preview.text || msg.content;
 
     // [CRITICAL FIX] Find the matching session by chatId from rawRooms
     const matchingRoom = this.rawRooms().find(room => room.chatId === chatId);
@@ -762,7 +955,8 @@ export class ChatFacade {
           
           // Update last message and timestamp
           updatedSession.lastMessage = messagePreview;
-          updatedSession.lastMessageTimestamp = msg.timestamp || new Date();
+          updatedSession.lastMessageTimestamp = preview.timestamp || (msg.timestamp || new Date());
+          updatedSession.lastMessageId = preview.id;
           
           // [CRITICAL FIX] Increment unread count only if:
           // 1. The message is NOT from the current user
@@ -803,33 +997,39 @@ export class ChatFacade {
     
     console.log('📝 [Facade] updateSessionPreviewOnly - ChatId:', chatId);
     
-    // Prepare message preview (truncate if needed)
-    let messagePreview = msg.content;
-    if (msg.type === MessageType.IMAGE) {
-      messagePreview = '📷 Image';
-    } else if (msg.type === MessageType.VIDEO) {
-      messagePreview = '🎥 Video';
-    } else if (msg.type === MessageType.FILE) {
-      messagePreview = `📎 ${msg.fileName || 'File'}`;
-    } else if (msg.type === MessageType.AUDIO) {
-      messagePreview = '🎤 Voice message';
+    const preview = this.buildSidebarPreview(msg);
+    const messagePreview = preview.text || msg.content;
+
+    // Find the matching session by chatId from rawRooms (preferred)
+    const matchingRoom = this.rawRooms().find(room => room.chatId === chatId);
+
+    // Determine the session ID to update
+    let sessionIdToUpdate: string | null = null;
+    if (matchingRoom) {
+      if (matchingRoom.isGroup) {
+        sessionIdToUpdate = matchingRoom.chatId;
+      } else {
+        sessionIdToUpdate = matchingRoom.senderId === currentUserId
+          ? matchingRoom.recipientId
+          : matchingRoom.senderId;
+      }
+    } else {
+      // Fallback when rawRooms isn't ready (e.g., immediately after login or temp sessions):
+      // - If there's a GROUP session with id === chatId, update that
+      const groupSession = this.sessions().find(s => s.type === 'GROUP' && s.id === chatId);
+      if (groupSession) {
+        sessionIdToUpdate = chatId;
+      } else {
+        // Private: session.id is partnerId
+        const partnerId = msg.senderId === currentUserId ? msg.recipientId : msg.senderId;
+        const privateSession = this.sessions().find(s => s.type === 'PRIVATE' && s.id === partnerId);
+        sessionIdToUpdate = privateSession ? partnerId : null;
+      }
     }
 
-    // Find the matching session by chatId from rawRooms
-    const matchingRoom = this.rawRooms().find(room => room.chatId === chatId);
-    if (!matchingRoom) {
-      console.warn('⚠️ [Facade] No room found for chatId:', chatId);
+    if (!sessionIdToUpdate) {
+      console.warn('⚠️ [Facade] No session found for chatId (rawRooms not ready?):', chatId);
       return;
-    }
-    
-    // Determine the session ID to update based on room type
-    let sessionIdToUpdate: string;
-    if (matchingRoom.isGroup) {
-      sessionIdToUpdate = matchingRoom.chatId;
-    } else {
-      sessionIdToUpdate = matchingRoom.senderId === currentUserId 
-        ? matchingRoom.recipientId 
-        : matchingRoom.senderId;
     }
 
     console.log('🔍 [Facade] Updating preview for session ID:', sessionIdToUpdate);
@@ -839,10 +1039,17 @@ export class ChatFacade {
       return sessions.map(session => {
         if (session.id === sessionIdToUpdate) {
           const updatedSession = { ...session };
+
+          // Only update preview if this message is the latest one for that session
+          const currentLastTs = session.lastMessageTimestamp?.getTime() || 0;
+          const msgTs = (preview.timestamp ? new Date(preview.timestamp).getTime() : 0) || 0;
+          const isSameLastById = !!msg.id && !!session.lastMessageId && session.lastMessageId === msg.id;
+          if (!isSameLastById && currentLastTs && msgTs && msgTs < currentLastTs) return session;
           
           // Update ONLY last message and timestamp
           updatedSession.lastMessage = messagePreview;
-          updatedSession.lastMessageTimestamp = msg.timestamp || new Date();
+          updatedSession.lastMessageTimestamp = preview.timestamp || (msg.timestamp || new Date());
+          updatedSession.lastMessageId = preview.id;
           
           console.log('📝 [Facade] Updated preview for', session.name, '- Unread count unchanged:', session.unreadCount);
           

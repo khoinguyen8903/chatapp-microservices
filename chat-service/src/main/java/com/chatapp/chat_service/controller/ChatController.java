@@ -176,6 +176,43 @@ public class ChatController {
             // Broadcast the revoked message to all users in the chat room
             System.out.println("✅ [ChatController] Message revoked. Broadcasting to: /topic/chat/" + chatId);
             messagingTemplate.convertAndSend("/topic/chat/" + chatId, revokedMessage);
+
+            // Also push a lightweight MESSAGE_UPDATE event to each user's personal topic,
+            // so sidebars update even if users are NOT currently subscribed to /topic/chat/{chatId}.
+            try {
+                Map<String, Object> updatePayload = new java.util.HashMap<>();
+                updatePayload.put("eventType", "MESSAGE_UPDATE");
+                updatePayload.put("id", revokedMessage.getId());
+                updatePayload.put("chatId", revokedMessage.getChatId());
+                updatePayload.put("senderId", revokedMessage.getSenderId());
+                updatePayload.put("recipientId", revokedMessage.getRecipientId());
+                updatePayload.put("content", revokedMessage.getContent());
+                updatePayload.put("fileName", revokedMessage.getFileName());
+                updatePayload.put("timestamp", revokedMessage.getTimestamp());
+                updatePayload.put("type", revokedMessage.getType());
+                updatePayload.put("status", revokedMessage.getStatus());
+                updatePayload.put("reactions", revokedMessage.getReactions());
+                updatePayload.put("replyToId", revokedMessage.getReplyToId());
+                updatePayload.put("messageStatus", revokedMessage.getMessageStatus());
+
+                Optional<ChatRoom> roomOpt = chatRoomService.findByChatId(chatId);
+                if (roomOpt.isPresent() && roomOpt.get().getMemberIds() != null && !roomOpt.get().getMemberIds().isEmpty()) {
+                    for (String memberId : roomOpt.get().getMemberIds()) {
+                        if (memberId == null || memberId.isBlank()) continue;
+                        messagingTemplate.convertAndSend("/topic/" + memberId, updatePayload);
+                    }
+                } else {
+                    // Fallback: at least notify sender & recipient (1-1)
+                    if (revokedMessage.getSenderId() != null) {
+                        messagingTemplate.convertAndSend("/topic/" + revokedMessage.getSenderId(), updatePayload);
+                    }
+                    if (revokedMessage.getRecipientId() != null) {
+                        messagingTemplate.convertAndSend("/topic/" + revokedMessage.getRecipientId(), updatePayload);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("❌ [ChatController] Failed to broadcast MESSAGE_UPDATE: " + e.getMessage());
+            }
             
         } catch (Exception e) {
             System.err.println("❌ [ChatController] Error in revokeMessage: " + e.getMessage());

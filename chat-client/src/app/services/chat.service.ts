@@ -29,6 +29,8 @@ export class ChatService {
   private statusSubject = new Subject<UserStatus>();
   private callMessageSubject = new Subject<any>();
   private messageStatusSubject = new Subject<any>();
+  // UI helper: allow components to request sidebar preview updates without reloading rooms API
+  private chatRoomPreviewSubject = new Subject<{ chatId: string; lastMessage: ChatMessage | null }>();
 
   private activeChatId: string | null = null;
   private activeChatSubscription: any = null;
@@ -91,6 +93,28 @@ export class ChatService {
           if (payload.type === 'STATUS_UPDATE') {
               _this.messageStatusSubject.next(payload);
               return; 
+          }
+
+          // [NEW] Message updates (revoke/react/etc.) pushed to personal topic
+          // Payload shape: { eventType: 'MESSAGE_UPDATE', ...ChatMessageFields }
+          if (payload.eventType === 'MESSAGE_UPDATE') {
+            const updated: ChatMessage = {
+              id: payload.id,
+              chatId: payload.chatId,
+              senderId: payload.senderId,
+              recipientId: payload.recipientId,
+              content: payload.content,
+              fileName: payload.fileName,
+              timestamp: payload.timestamp ? new Date(payload.timestamp) : new Date(),
+              type: payload.type || MessageType.TEXT,
+              status: payload.status || MessageStatus.SENT,
+              reactions: (payload.reactions || []) as MessageReaction[],
+              replyToId: payload.replyToId,
+              messageStatus: payload.messageStatus,
+              senderName: payload.senderName
+            };
+            _this.messageUpdateSubject.next(updated);
+            return;
           }
 
           if (payload.hasOwnProperty('isTyping') || payload.hasOwnProperty('typing')) {
@@ -246,7 +270,11 @@ export class ChatService {
           type: payload.type || MessageType.TEXT,
           status: payload.status || MessageStatus.SENT,
           senderName: payload.senderName,
-          reactions: (payload.reactions || []) as MessageReaction[]
+          reactions: (payload.reactions || []) as MessageReaction[],
+          // [IMPORTANT] These fields are required for reply/revoke features.
+          // Backend sends them on ChatMessage for both react + revoke broadcasts.
+          replyToId: payload.replyToId,
+          messageStatus: payload.messageStatus
         };
 
         this.messageUpdateSubject.next(updated);
@@ -333,4 +361,16 @@ export class ChatService {
   onCallMessage(): Observable<any> { return this.callMessageSubject.asObservable(); }
   onStatusUpdate(): Observable<UserStatus> { return this.statusSubject.asObservable(); }
   onMessageStatusChange(): Observable<any> { return this.messageStatusSubject.asObservable(); }
+
+  /**
+   * Request an in-place sidebar preview update (no API reload).
+   * Note: Actual state is managed by ChatFacade; this is just an event hook.
+   */
+  updateChatRoomPreview(chatId: string, lastMessage: ChatMessage | null) {
+    this.chatRoomPreviewSubject.next({ chatId, lastMessage });
+  }
+
+  onChatRoomPreviewUpdate(): Observable<{ chatId: string; lastMessage: ChatMessage | null }> {
+    return this.chatRoomPreviewSubject.asObservable();
+  }
 }
