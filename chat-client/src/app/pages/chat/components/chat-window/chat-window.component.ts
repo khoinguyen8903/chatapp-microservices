@@ -1,6 +1,7 @@
-import { Component, inject, ElementRef, ViewChild, effect, OnDestroy, OnInit, Input, ChangeDetectionStrategy, ChangeDetectorRef, HostListener, NgZone } from '@angular/core';
+import { Component, inject, ElementRef, ViewChild, effect, OnDestroy, OnInit, Input, ChangeDetectionStrategy, ChangeDetectorRef, HostListener, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 import { PickerModule } from '@ctrl/ngx-emoji-mart';
 import { ChatFacade } from '../../chat.facade';
 import { LastSeenPipe } from '../../pipes/last-seen.pipe';
@@ -10,15 +11,18 @@ import { FileHelper } from '../../utils/file.helper';
 import { MessageType, MessageStatus, ChatMessage, ChatSession, MessageReaction } from '../../../../models/chat.models';
 import { NotificationService } from '../../../../services/notification.service';
 import { ChatService } from '../../../../services/chat.service';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../../../environments/environment';
 
 @Component({
   selector: 'app-chat-window',
   standalone: true,
-  imports: [CommonModule, FormsModule, PickerModule, LastSeenPipe, SafeUrlPipe, FileNamePipe],
+  imports: [CommonModule, FormsModule, RouterModule, PickerModule, LastSeenPipe, SafeUrlPipe, FileNamePipe],
   templateUrl: './chat-window.component.html',
   styleUrls: ['./chat-window.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush  // ✅ OnPush for better performance
 })
+// Note: SlicePipe is included in CommonModule, HttpClient is provided at app level, RouterModule for routerLink
 export class ChatWindowComponent implements OnInit, OnDestroy {
   public facade = inject(ChatFacade);
   private cdr = inject(ChangeDetectorRef);
@@ -26,12 +30,37 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   private notificationService = inject(NotificationService);
   private elementRef = inject(ElementRef);
   private chatService = inject(ChatService);
+  private http = inject(HttpClient);
 
   // Mobile back button handler
   @Input() onBackToSidebar?: () => void;
 
   newMessage = '';
   showEmojiPicker = false;
+
+  // --- RIGHT SIDEBAR STATE ---
+  showRightSidebar = false;
+  isMediaSectionOpen = false;
+  activeMediaTab: 'media' | 'files' = 'media';
+  mediaItems: ChatMessage[] = [];
+  fileItems: ChatMessage[] = [];
+  isLoadingMedia = false;
+  lightboxItem: ChatMessage | null = null;
+
+  // --- GROUP MEMBERS STATE ---
+  showGroupMembers = false;
+  groupMembers: Array<{ id: string; username: string; avatarUrl?: string }> = [];
+  isLoadingMembers = false;
+
+  // --- MUTE STATE ---
+  isMuted = false;
+
+  // --- SEARCH IN CHAT STATE ---
+  isSearchMode = false;
+  searchKeyword = '';
+  searchResults: ChatMessage[] = [];
+  isSearching = false;
+  hasSearched = false;
 
   // --- Voice message (audio recording) ---
   isRecording = false;
@@ -641,9 +670,13 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
         return;
       }
       
-      // Toggle showStatus on the message
-      msg.showStatus = !msg.showStatus;
-      this.cdr.markForCheck();
+      // Toggle showStatus on the message via signal update (OnPush compatible)
+      const msgId = msg.id;
+      if (msgId) {
+        this.facade.messages.update((msgs) =>
+          msgs.map((m) => m.id === msgId ? { ...m, showStatus: !m.showStatus } : m)
+        );
+      }
     }
 
     // Set flag to prevent click event from opening menu
@@ -868,8 +901,13 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     event.preventDefault();
     event.stopPropagation();
 
-    msg.showStatus = !msg.showStatus;
-    this.cdr.markForCheck();
+    // Toggle showStatus via signal update (OnPush compatible)
+    const msgId = msg.id;
+    if (msgId) {
+      this.facade.messages.update((msgs) =>
+        msgs.map((m) => m.id === msgId ? { ...m, showStatus: !m.showStatus } : m)
+      );
+    }
   }
 
   /**
@@ -1265,5 +1303,266 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     this.facade.messages.update((msgs) =>
       msgs.map((m) => (this.isSameAudioMessage(m, key) ? { ...m, isPlaying: false } : m))
     );
+  }
+
+  // =============================================
+  // RIGHT SIDEBAR METHODS
+  // =============================================
+
+  toggleRightSidebar() {
+    this.showRightSidebar = !this.showRightSidebar;
+    if (this.showRightSidebar) {
+      this.loadMuteStatus();
+    }
+  }
+
+  closeRightSidebar() {
+    this.showRightSidebar = false;
+    this.isSearchMode = false;
+    this.searchKeyword = '';
+    this.searchResults = [];
+    this.hasSearched = false;
+    this.showGroupMembers = false;
+    this.groupMembers = [];
+  }
+
+  // --- GROUP MEMBERS (for Group Chats) ---
+  toggleGroupMembers() {
+    this.showGroupMembers = !this.showGroupMembers;
+    if (this.showGroupMembers && this.groupMembers.length === 0) {
+      this.loadGroupMembers();
+    }
+  }
+
+  loadGroupMembers() {
+    const session = this.facade.selectedSession();
+    if (!session || session.type !== 'GROUP') return;
+
+    this.isLoadingMembers = true;
+
+    // Get group details including member info
+    this.http.get<any>(`${environment.apiUrl}/rooms/group/${session.id}/members`)
+      .subscribe({
+        next: (data) => {
+          // Data should be an array of user objects with id, username, avatarUrl
+          this.groupMembers = data || [];
+          this.isLoadingMembers = false;
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          console.error('Error loading group members:', err);
+          // Fallback: Try to display members from session if available
+          this.groupMembers = [];
+          this.isLoadingMembers = false;
+          this.cdr.markForCheck();
+        }
+      });
+  }
+
+  /**
+   * Check if a member is the current user
+   */
+  isCurrentUser(memberId: string): boolean {
+    return memberId === this.facade.currentUser()?.id;
+  }
+
+  /**
+   * Get the partner ID for private chats (used for profile link)
+   */
+  getPartnerId(): string | null {
+    const session = this.facade.selectedSession();
+    if (!session || session.type !== 'PRIVATE') return null;
+    return session.id; // In private chats, session.id is the partner's ID
+  }
+
+  // --- MEDIA & FILES SECTION ---
+  toggleMediaSection() {
+    this.isMediaSectionOpen = !this.isMediaSectionOpen;
+    if (this.isMediaSectionOpen && this.mediaItems.length === 0 && this.fileItems.length === 0) {
+      this.loadMediaAndFiles();
+    }
+  }
+
+  switchMediaTab(tab: 'media' | 'files') {
+    this.activeMediaTab = tab;
+  }
+
+  loadMediaAndFiles() {
+    const session = this.facade.selectedSession();
+    if (!session) return;
+
+    this.isLoadingMedia = true;
+    const chatId = session.id;
+
+    // Load media (images/videos)
+    this.http.get<ChatMessage[]>(`${environment.apiUrl}/messages/${chatId}/media?types=IMAGE,VIDEO`)
+      .subscribe({
+        next: (data) => {
+          this.mediaItems = data;
+          this.cdr.markForCheck();
+        },
+        error: (err) => console.error('Error loading media:', err)
+      });
+
+    // Load files
+    this.http.get<ChatMessage[]>(`${environment.apiUrl}/messages/${chatId}/media?types=FILE`)
+      .subscribe({
+        next: (data) => {
+          this.fileItems = data;
+          this.isLoadingMedia = false;
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          console.error('Error loading files:', err);
+          this.isLoadingMedia = false;
+          this.cdr.markForCheck();
+        }
+      });
+  }
+
+  openLightbox(item: ChatMessage) {
+    this.lightboxItem = item;
+  }
+
+  closeLightbox() {
+    this.lightboxItem = null;
+  }
+
+  // --- MUTE NOTIFICATIONS ---
+  loadMuteStatus() {
+    const session = this.facade.selectedSession();
+    if (!session) return;
+
+    const userId = this.facade.currentUser()?.id;
+    if (!userId) return;
+
+    this.http.get<{ muted: boolean }>(`${environment.apiUrl}/rooms/${session.id}/mute/${userId}`)
+      .subscribe({
+        next: (data) => {
+          this.isMuted = data.muted;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.isMuted = false;
+        }
+      });
+  }
+
+  toggleMute() {
+    const session = this.facade.selectedSession();
+    if (!session) return;
+
+    const userId = this.facade.currentUser()?.id;
+    if (!userId) return;
+
+    this.http.put<{ muted: boolean }>(`${environment.apiUrl}/rooms/${session.id}/mute`, { userId })
+      .subscribe({
+        next: (data) => {
+          this.isMuted = data.muted;
+          this.cdr.markForCheck();
+          console.log(this.isMuted ? '🔕 Notifications muted' : '🔔 Notifications enabled');
+        },
+        error: (err) => console.error('Error toggling mute:', err)
+      });
+  }
+
+  // --- SEARCH IN CHAT ---
+  openSearchInChat() {
+    this.isSearchMode = true;
+    this.searchKeyword = '';
+    this.searchResults = [];
+    this.hasSearched = false;
+    
+    // Focus search input after render
+    setTimeout(() => {
+      const input = document.querySelector('.search-input') as HTMLInputElement;
+      input?.focus();
+    }, 100);
+  }
+
+  closeSearchInChat() {
+    this.isSearchMode = false;
+    this.searchKeyword = '';
+    this.searchResults = [];
+    this.hasSearched = false;
+  }
+
+  performSearch() {
+    if (!this.searchKeyword.trim()) return;
+
+    const session = this.facade.selectedSession();
+    if (!session) return;
+
+    this.isSearching = true;
+    this.hasSearched = true;
+
+    this.http.get<ChatMessage[]>(`${environment.apiUrl}/messages/${session.id}/search?keyword=${encodeURIComponent(this.searchKeyword)}`)
+      .subscribe({
+        next: (results) => {
+          this.searchResults = results;
+          this.isSearching = false;
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          console.error('Search error:', err);
+          this.searchResults = [];
+          this.isSearching = false;
+          this.cdr.markForCheck();
+        }
+      });
+  }
+
+  scrollToMessage(targetMsg: ChatMessage) {
+    // Close sidebar on mobile
+    if (window.innerWidth < 1024) {
+      this.closeRightSidebar();
+    }
+
+    // Find message in current loaded messages
+    const messages = this.facade.messages();
+    const existingMsg = messages.find(m => m.id === targetMsg.id);
+
+    if (existingMsg) {
+      // Message is loaded, scroll to it
+      this.scrollToMessageElement(targetMsg.id!);
+    } else {
+      // Message not in current view - need to load more history
+      // For now, just show a notification
+      console.log('Message not in current view, loading more history...');
+      // TODO: Implement pagination to load the message's context
+      this.scrollToMessageElement(targetMsg.id!);
+    }
+  }
+
+  private scrollToMessageElement(messageId: string) {
+    setTimeout(() => {
+      const messageElements = document.querySelectorAll('.message-wrapper');
+      let targetElement: HTMLElement | null = null;
+
+      messageElements.forEach((el) => {
+        const msg = this.facade.messages().find(m => {
+          const wrapper = el as HTMLElement;
+          return wrapper.contains(document.querySelector(`[data-message-id="${m.id}"]`));
+        });
+      });
+
+      // Fallback: Find by iterating through messages
+      const messages = this.facade.messages();
+      const index = messages.findIndex(m => m.id === messageId);
+      
+      if (index !== -1 && messageElements[index]) {
+        targetElement = messageElements[index] as HTMLElement;
+      }
+
+      if (targetElement) {
+        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Highlight the message
+        targetElement.classList.add('highlight-flash');
+        setTimeout(() => {
+          targetElement?.classList.remove('highlight-flash');
+        }, 2000);
+      }
+    }, 300);
   }
 }

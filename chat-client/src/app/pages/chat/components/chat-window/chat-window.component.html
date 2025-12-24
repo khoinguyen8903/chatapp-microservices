@@ -80,10 +80,12 @@
           </button>
           
           <button 
+            (click)="toggleRightSidebar()"
             class="action-button"
-            title="More Options"
-            aria-label="More options">
-            <i class="fas fa-ellipsis-v"></i>
+            [class.active]="showRightSidebar"
+            title="Chat Details"
+            aria-label="Toggle chat details">
+            <i class="fas fa-info-circle"></i>
           </button>
         </div>
       </div>
@@ -567,3 +569,307 @@
   }
 
 </div>
+
+<!-- RIGHT SIDEBAR (Chat Details) - Facebook Messenger Style -->
+@if (showRightSidebar) {
+  <div class="right-sidebar-backdrop" (click)="closeRightSidebar()"></div>
+}
+<aside 
+  class="right-sidebar"
+  [class.is-open]="showRightSidebar"
+  [class.is-closed]="!showRightSidebar">
+  
+  @if (facade.selectedSession(); as session) {
+    <!-- Close Button (Mobile) -->
+    <button class="sidebar-close-btn" (click)="closeRightSidebar()" aria-label="Close sidebar">
+      <i class="fas fa-times"></i>
+    </button>
+
+    <!-- ========== PRIVATE CHAT: Partner Info ========== -->
+    @if (session.type === 'PRIVATE') {
+      <div class="sidebar-profile">
+        <div class="profile-avatar-large">
+          <img 
+            [src]="session.avatar" 
+            (error)="onAvatarError($event)"
+            [alt]="session.name + ' avatar'"
+            loading="lazy">
+        </div>
+        <h3 class="profile-name">{{ session.name }}</h3>
+        <p class="profile-status-text">
+          @if (facade.partnerStatus() === 'ONLINE') {
+            <span class="status-online-dot"></span>
+            Đang hoạt động
+          } @else {
+            {{ facade.lastSeen() | lastSeen:facade.partnerStatus() }}
+          }
+        </p>
+
+        <!-- Action Buttons Row for Private Chat -->
+        <div class="profile-actions">
+          <a 
+            class="profile-action-btn" 
+            [routerLink]="['/profile', session.id]"
+            title="Xem hồ sơ">
+            <i class="fas fa-user"></i>
+            <span>Xem hồ sơ</span>
+          </a>
+          <button 
+            class="profile-action-btn" 
+            [class.muted]="isMuted"
+            (click)="toggleMute()"
+            title="Mute">
+            <i class="fas" [class.fa-bell]="!isMuted" [class.fa-bell-slash]="isMuted"></i>
+            <span>{{ isMuted ? 'Bật' : 'Tắt' }}</span>
+          </button>
+          <button 
+            class="profile-action-btn" 
+            (click)="openSearchInChat()"
+            title="Search">
+            <i class="fas fa-search"></i>
+            <span>Tìm kiếm</span>
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- ========== GROUP CHAT: Group Info & Members ========== -->
+    @if (session.type === 'GROUP') {
+      <div class="sidebar-profile group-profile">
+        <div class="profile-avatar-large group-avatar-placeholder">
+          <i class="fas fa-users"></i>
+        </div>
+        <h3 class="profile-name">{{ session.name }}</h3>
+        <p class="profile-status-text">
+          <i class="fas fa-user-friends"></i>
+          {{ session.memberCount || 0 }} thành viên
+        </p>
+
+        <!-- Action Buttons Row for Group Chat -->
+        <div class="profile-actions">
+          <button 
+            class="profile-action-btn"
+            [class.active]="showGroupMembers"
+            (click)="toggleGroupMembers()"
+            title="Xem thành viên">
+            <i class="fas fa-users-cog"></i>
+            <span>{{ showGroupMembers ? 'Ẩn' : 'Thành viên' }}</span>
+          </button>
+          <button 
+            class="profile-action-btn" 
+            [class.muted]="isMuted"
+            (click)="toggleMute()"
+            title="Mute">
+            <i class="fas" [class.fa-bell]="!isMuted" [class.fa-bell-slash]="isMuted"></i>
+            <span>{{ isMuted ? 'Bật' : 'Tắt' }}</span>
+          </button>
+          <button 
+            class="profile-action-btn" 
+            (click)="openSearchInChat()"
+            title="Search">
+            <i class="fas fa-search"></i>
+            <span>Tìm kiếm</span>
+          </button>
+        </div>
+
+        <!-- Group Members List -->
+        @if (showGroupMembers) {
+          <div class="group-members-list">
+            <h4 class="members-title">Thành viên nhóm</h4>
+            
+            @if (isLoadingMembers) {
+              <div class="loading-members">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Đang tải...</span>
+              </div>
+            } @else if (groupMembers.length > 0) {
+              @for (member of groupMembers; track member.id) {
+                <div class="member-item">
+                  <img 
+                    [src]="member.avatarUrl || 'assets/default-avatar.svg'" 
+                    (error)="onAvatarError($event)"
+                    class="member-avatar"
+                    [alt]="member.username">
+                  <span class="member-name">
+                    {{ member.username }}
+                    @if (isCurrentUser(member.id)) {
+                      <span class="you-badge">(Bạn)</span>
+                    }
+                  </span>
+                  @if (!isCurrentUser(member.id)) {
+                    <a 
+                      class="member-profile-link" 
+                      [routerLink]="['/profile', member.id]"
+                      title="Xem hồ sơ">
+                      <i class="fas fa-external-link-alt"></i>
+                    </a>
+                  }
+                </div>
+              }
+            } @else {
+              <div class="no-members">
+                <span>Không có thông tin thành viên</span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Search in Chat Mode -->
+    @if (isSearchMode) {
+      <div class="search-in-chat">
+        <div class="search-header">
+          <button class="search-back-btn" (click)="closeSearchInChat()">
+            <i class="fas fa-arrow-left"></i>
+          </button>
+          <input 
+            type="text"
+            [(ngModel)]="searchKeyword"
+            (keyup.enter)="performSearch()"
+            placeholder="Tìm tin nhắn..."
+            class="search-input"
+            #searchInput>
+          <button 
+            class="search-submit-btn" 
+            (click)="performSearch()"
+            [disabled]="!searchKeyword.trim()">
+            <i class="fas fa-search"></i>
+          </button>
+        </div>
+
+        @if (isSearching) {
+          <div class="search-loading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span>Đang tìm kiếm...</span>
+          </div>
+        }
+
+        @if (searchResults.length > 0) {
+          <div class="search-results">
+            @for (result of searchResults; track result.id) {
+              <div class="search-result-item" (click)="scrollToMessage(result)">
+                <div class="result-content">{{ result.content | slice:0:80 }}{{ result.content.length > 80 ? '...' : '' }}</div>
+                <div class="result-time">{{ result.timestamp | date:'dd/MM/yyyy HH:mm' }}</div>
+              </div>
+            }
+          </div>
+        }
+
+        @if (!isSearching && searchKeyword.trim() && searchResults.length === 0 && hasSearched) {
+          <div class="no-results">
+            <i class="fas fa-search"></i>
+            <span>Không tìm thấy kết quả</span>
+          </div>
+        }
+      </div>
+    } @else {
+      <!-- Media & Files Accordion -->
+      <div class="sidebar-section">
+        <button 
+          class="section-header" 
+          (click)="toggleMediaSection()"
+          [attr.aria-expanded]="isMediaSectionOpen">
+          <span>File phương tiện & File</span>
+          <i class="fas" [class.fa-chevron-down]="!isMediaSectionOpen" [class.fa-chevron-up]="isMediaSectionOpen"></i>
+        </button>
+
+        @if (isMediaSectionOpen) {
+          <div class="section-content">
+            <!-- Tabs -->
+            <div class="media-tabs">
+              <button 
+                class="media-tab" 
+                [class.active]="activeMediaTab === 'media'"
+                (click)="switchMediaTab('media')">
+                Ảnh/Video
+              </button>
+              <button 
+                class="media-tab" 
+                [class.active]="activeMediaTab === 'files'"
+                (click)="switchMediaTab('files')">
+                File
+              </button>
+            </div>
+
+            <!-- Media Tab Content -->
+            @if (activeMediaTab === 'media') {
+              @if (isLoadingMedia) {
+                <div class="loading-media">
+                  <i class="fas fa-spinner fa-spin"></i>
+                </div>
+              } @else if (mediaItems.length > 0) {
+                <div class="media-grid">
+                  @for (item of mediaItems; track item.id) {
+                    <div class="media-item" (click)="openLightbox(item)">
+                      @if (item.type === 'IMAGE') {
+                        <img [src]="item.content" [alt]="'Media'" loading="lazy">
+                      } @else if (item.type === 'VIDEO') {
+                        <div class="video-thumb">
+                          <video [src]="item.content" preload="metadata"></video>
+                          <i class="fas fa-play-circle"></i>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              } @else {
+                <div class="empty-section">
+                  <i class="fas fa-image"></i>
+                  <span>Chưa có ảnh/video</span>
+                </div>
+              }
+            }
+
+            <!-- Files Tab Content -->
+            @if (activeMediaTab === 'files') {
+              @if (isLoadingMedia) {
+                <div class="loading-media">
+                  <i class="fas fa-spinner fa-spin"></i>
+                </div>
+              } @else if (fileItems.length > 0) {
+                <div class="files-list">
+                  @for (file of fileItems; track file.id) {
+                    <a [href]="file.content" target="_blank" class="file-item">
+                      <div class="file-icon">
+                        <i class="fas fa-file-alt"></i>
+                      </div>
+                      <div class="file-info">
+                        <span class="file-name">{{ file.fileName || 'File' }}</span>
+                        <span class="file-date">{{ file.timestamp | date:'dd/MM/yyyy' }}</span>
+                      </div>
+                      <button class="file-download">
+                        <i class="fas fa-download"></i>
+                      </button>
+                    </a>
+                  }
+                </div>
+              } @else {
+                <div class="empty-section">
+                  <i class="fas fa-file-alt"></i>
+                  <span>Chưa có file</span>
+                </div>
+              }
+            }
+          </div>
+        }
+      </div>
+    }
+  }
+</aside>
+
+<!-- Lightbox for Image/Video Preview -->
+@if (lightboxItem) {
+  <div class="lightbox-overlay" (click)="closeLightbox()">
+    <button class="lightbox-close" (click)="closeLightbox()">
+      <i class="fas fa-times"></i>
+    </button>
+    <div class="lightbox-content" (click)="$event.stopPropagation()">
+      @if (lightboxItem.type === 'IMAGE') {
+        <img [src]="lightboxItem.content" [alt]="'Preview'">
+      } @else if (lightboxItem.type === 'VIDEO') {
+        <video [src]="lightboxItem.content" controls autoplay></video>
+      }
+    </div>
+  </div>
+}

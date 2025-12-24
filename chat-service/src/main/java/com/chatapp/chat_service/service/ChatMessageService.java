@@ -8,6 +8,7 @@ import com.chatapp.chat_service.model.ChatMessage;
 import com.chatapp.chat_service.model.ChatRoom;
 import com.chatapp.chat_service.repository.ChatMessageRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -138,6 +139,12 @@ public class ChatMessageService {
             ChatRoom group = chatRoomOpt.get();
             for (String memberId : group.getMemberIds()) {
                 if (!memberId.equals(message.getSenderId())) {
+                    // [MUTE CHECK] Check if user has muted this chat
+                    if (chatRoomService.shouldSuppressNotification(message.getChatId(), memberId)) {
+                        System.out.println("🔕 [ChatMessageService] Skipping notification for muted user: " + memberId);
+                        continue;
+                    }
+                    
                     NotificationRequest notiReq = new NotificationRequest(
                             memberId,
                             senderName, // Username người gửi
@@ -150,6 +157,12 @@ public class ChatMessageService {
             }
         } else {
             // Chat 1-1
+            // [MUTE CHECK] Check if recipient has muted this chat
+            if (chatRoomService.shouldSuppressNotification(message.getChatId(), message.getRecipientId())) {
+                System.out.println("🔕 [ChatMessageService] Skipping notification for muted user: " + message.getRecipientId());
+                return;
+            }
+            
             NotificationRequest notiReq = new NotificationRequest(
                     message.getRecipientId(),
                     senderName, // Username người gửi
@@ -476,5 +489,63 @@ public class ChatMessageService {
         }
         
         return messagesToUpdate;
+    }
+
+    // =============================================
+    // MEDIA & FILES METHODS
+    // =============================================
+
+    /**
+     * Find media messages (images, videos, files) in a chat.
+     * Works for both group chats (chatId) and private chats (partnerId).
+     */
+    public List<ChatMessage> findMediaByChat(String chatIdOrPartnerId, List<MessageType> types) {
+        Sort sort = Sort.by(Sort.Direction.DESC, "timestamp");
+        
+        // First try to find by exact chatId (works for group chats)
+        Optional<ChatRoom> roomOpt = chatRoomService.findByChatId(chatIdOrPartnerId);
+        
+        if (roomOpt.isPresent()) {
+            // Group chat or room found directly by chatId
+            return repository.findByChatIdAndTypeIn(chatIdOrPartnerId, types, sort);
+        }
+        
+        // For private chats, search by participant ID
+        List<ChatMessage> results = repository.findByParticipantAndTypeIn(chatIdOrPartnerId, types, sort);
+        
+        // Limit results to avoid memory issues
+        if (results.size() > 100) {
+            return results.subList(0, 100);
+        }
+        
+        return results;
+    }
+
+    // =============================================
+    // SEARCH IN CONVERSATION METHODS
+    // =============================================
+
+    /**
+     * Search messages by keyword in a chat conversation.
+     * Only searches TEXT messages.
+     */
+    public List<ChatMessage> searchMessagesInChat(String chatIdOrPartnerId, String keyword) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        Sort sort = Sort.by(Sort.Direction.DESC, "timestamp");
+        
+        // Escape special regex characters in keyword
+        String escapedKeyword = keyword.replaceAll("([\\[\\]\\\\^$.|?*+(){}])", "\\\\$1");
+        
+        List<ChatMessage> results = repository.searchByContentInChat(chatIdOrPartnerId, escapedKeyword, sort);
+        
+        // Limit results
+        if (results.size() > 50) {
+            return results.subList(0, 50);
+        }
+        
+        return results;
     }
 }

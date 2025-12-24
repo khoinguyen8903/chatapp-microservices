@@ -1,7 +1,9 @@
 package com.chatapp.chat_service.repository;
 
 import com.chatapp.chat_service.enums.MessageStatus;
+import com.chatapp.chat_service.enums.MessageType;
 import com.chatapp.chat_service.model.ChatMessage;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import java.util.List;
@@ -22,4 +24,17 @@ public interface ChatMessageRepository extends MongoRepository<ChatMessage, Stri
     // For group chat: Count messages NOT sent BY userId that are SENT or DELIVERED (not yet SEEN)
     @Query(value = "{ 'chatId': ?0, 'senderId': { $ne: ?1 }, 'status': { $in: ['SENT', 'DELIVERED'] } }", count = true)
     long countUnreadMessagesInGroup(String chatId, String userId);
+
+    // --- [MEDIA & FILES SECTION] ---
+    // Find messages by chatId and type(s), sorted by timestamp descending
+    List<ChatMessage> findByChatIdAndTypeIn(String chatId, List<MessageType> types, Sort sort);
+    
+    // Find messages by recipientId (for private chat as partnerId) and type(s)
+    @Query("{ '$or': [ {'chatId': ?0}, {'senderId': ?0}, {'recipientId': ?0} ], 'type': { $in: ?1 } }")
+    List<ChatMessage> findByParticipantAndTypeIn(String participantId, List<MessageType> types, Sort sort);
+
+    // --- [SEARCH IN CONVERSATION] ---
+    // Text search in content field - requires text index on 'content' field
+    @Query("{ '$or': [ {'chatId': ?0}, {'senderId': ?0}, {'recipientId': ?0} ], 'content': { $regex: ?1, $options: 'i' } }")
+    List<ChatMessage> searchByContentInChat(String chatId, String keyword, Sort sort);
 }

@@ -9,7 +9,9 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @AllArgsConstructor
@@ -40,4 +42,9 @@ public class ChatRoom {
     // Transient field (not persisted in DB, calculated dynamically)
     @Transient
     private int unreadCount;
+
+    // --- [MUTE NOTIFICATIONS] ---
+    // Map<UserId, Boolean> - true means muted for that user
+    @Builder.Default
+    private Map<String, Boolean> muteSettings = new HashMap<>();
 }

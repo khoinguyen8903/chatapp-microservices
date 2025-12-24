@@ -2,6 +2,7 @@ package com.chatapp.chat_service.controller;
 
 import com.chatapp.chat_service.dto.ReactionRequest;
 import com.chatapp.chat_service.enums.MessageStatus;
+import com.chatapp.chat_service.enums.MessageType;
 import com.chatapp.chat_service.model.ChatMessage;
 import com.chatapp.chat_service.model.ChatNotification;
 import com.chatapp.chat_service.model.ChatRoom;
@@ -21,9 +22,11 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Controller
 public class ChatController {
@@ -467,6 +470,142 @@ public class ChatController {
                     "success", false,
                     "error", e.getMessage()
             ));
+        }
+    }
+
+    // =============================================
+    // MEDIA & FILES API
+    // =============================================
+
+    /**
+     * Get media/files from a chat conversation.
+     * @param chatId - The chat room ID or partner ID
+     * @param types - Comma-separated list of types: IMAGE, VIDEO, FILE, AUDIO
+     */
+    @GetMapping("/messages/{chatId}/media")
+    public ResponseEntity<List<ChatMessage>> getMediaMessages(
+            @PathVariable String chatId,
+            @RequestParam(defaultValue = "IMAGE,VIDEO") String types) {
+        try {
+            System.out.println("📸 [ChatController] Getting media for chatId: " + chatId + ", types: " + types);
+            
+            List<MessageType> messageTypes = Arrays.stream(types.split(","))
+                    .map(String::trim)
+                    .map(MessageType::valueOf)
+                    .collect(Collectors.toList());
+            
+            List<ChatMessage> media = chatMessageService.findMediaByChat(chatId, messageTypes);
+            
+            System.out.println("✅ [ChatController] Found " + media.size() + " media items");
+            return ResponseEntity.ok(media);
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error getting media: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.ok(new java.util.ArrayList<>());
+        }
+    }
+
+    // =============================================
+    // SEARCH IN CONVERSATION API
+    // =============================================
+
+    /**
+     * Search messages in a conversation.
+     * @param chatId - The chat room ID or partner ID
+     * @param keyword - Search keyword
+     */
+    @GetMapping("/messages/{chatId}/search")
+    public ResponseEntity<List<ChatMessage>> searchMessages(
+            @PathVariable String chatId,
+            @RequestParam String keyword) {
+        try {
+            System.out.println("🔍 [ChatController] Searching in chatId: " + chatId + ", keyword: " + keyword);
+            
+            List<ChatMessage> results = chatMessageService.searchMessagesInChat(chatId, keyword);
+            
+            System.out.println("✅ [ChatController] Found " + results.size() + " search results");
+            return ResponseEntity.ok(results);
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error searching messages: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.ok(new java.util.ArrayList<>());
+        }
+    }
+
+    // =============================================
+    // MUTE NOTIFICATIONS API
+    // =============================================
+
+    /**
+     * Get mute status for a user in a room.
+     */
+    @GetMapping("/rooms/{roomId}/mute/{userId}")
+    public ResponseEntity<Map<String, Object>> getMuteStatus(
+            @PathVariable String roomId,
+            @PathVariable String userId) {
+        try {
+            boolean muted = chatRoomService.isMuted(roomId, userId);
+            return ResponseEntity.ok(Map.of("muted", muted));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of("muted", false));
+        }
+    }
+
+    /**
+     * Toggle mute status for a user in a room.
+     */
+    @PutMapping("/rooms/{roomId}/mute")
+    public ResponseEntity<Map<String, Object>> toggleMute(
+            @PathVariable String roomId,
+            @RequestBody Map<String, String> body) {
+        try {
+            String userId = body.get("userId");
+            if (userId == null || userId.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "error", "userId is required"
+                ));
+            }
+
+            boolean newMuteState = chatRoomService.toggleMute(roomId, userId);
+            
+            System.out.println("🔔 [ChatController] Mute toggled for user " + userId + 
+                              " in room " + roomId + ": " + (newMuteState ? "MUTED" : "UNMUTED"));
+            
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "muted", newMuteState
+            ));
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error toggling mute: " + e.getMessage());
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        }
+    }
+
+    // =============================================
+    // GROUP MEMBERS API
+    // =============================================
+
+    /**
+     * Get group members with their user info.
+     * @param groupId - The group chatId
+     */
+    @GetMapping("/rooms/group/{groupId}/members")
+    public ResponseEntity<List<Map<String, Object>>> getGroupMembers(@PathVariable String groupId) {
+        try {
+            System.out.println("👥 [ChatController] Getting members for group: " + groupId);
+            
+            List<Map<String, Object>> members = chatRoomService.getGroupMembersWithInfo(groupId);
+            
+            System.out.println("✅ [ChatController] Found " + members.size() + " group members");
+            return ResponseEntity.ok(members);
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error getting group members: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.ok(new java.util.ArrayList<>());
         }
     }
 }

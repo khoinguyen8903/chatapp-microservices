@@ -11,4 +11,5 @@ public class UserDTO {
     private String id;
     private String username; // Chúng ta sẽ lấy trường này
     private String fullName;
+    private String avatarUrl; // Avatar URL for display
 }

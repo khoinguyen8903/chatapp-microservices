@@ -1,0 +1,153 @@
+<!-- User Profile View Page -->
+<div class="user-profile-page">
+  <!-- Header with Back Button -->
+  <header class="profile-header">
+    <button class="back-btn" (click)="goBack()" aria-label="Go back">
+      <i class="fas fa-arrow-left"></i>
+    </button>
+    <h1 class="header-title">Thông tin người dùng</h1>
+    <div class="header-spacer"></div>
+  </header>
+
+  <!-- Loading State -->
+  @if (isLoading) {
+    <div class="loading-container">
+      <div class="loading-spinner">
+        <i class="fas fa-spinner fa-spin"></i>
+      </div>
+      <p>Đang tải thông tin...</p>
+    </div>
+  }
+
+  <!-- Error State -->
+  @if (errorMessage && !isLoading) {
+    <div class="error-container">
+      <div class="error-icon">
+        <i class="fas fa-exclamation-triangle"></i>
+      </div>
+      <p class="error-message">{{ errorMessage }}</p>
+      <button class="retry-btn" (click)="loadUserProfile()">
+        <i class="fas fa-redo"></i>
+        Thử lại
+      </button>
+    </div>
+  }
+
+  <!-- Profile Content -->
+  @if (profile && !isLoading) {
+    <div class="profile-content-wrapper">
+      <div class="profile-card">
+        <!-- Avatar Section -->
+        <div class="avatar-section">
+          <div class="avatar-container">
+            <div class="avatar-wrapper">
+              @if (profile.avatarUrl) {
+                <img 
+                  [src]="getAvatarUrl()" 
+                  (error)="onAvatarError($event)"
+                  [alt]="profile.fullName + ' avatar'"
+                  class="avatar-image">
+              } @else {
+                <div class="avatar-placeholder">
+                  <span class="initials">{{ getInitials() }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Profile Information Form (Read-only) -->
+        <div class="profile-form">
+          
+          <!-- Email (Read-only) -->
+          <div class="form-group">
+            <label class="form-label">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+              </svg>
+              Email Address
+            </label>
+            <div class="input-with-badge">
+              <input 
+                type="email" 
+                class="form-input readonly-input"
+                [value]="profile.email" 
+                readonly 
+                disabled
+              />
+              @if (profile.isActive) {
+                <span class="verified-badge">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Verified
+                </span>
+              }
+            </div>
+          </div>
+
+          <!-- Full Name (Read-only) -->
+          <div class="form-group">
+            <label class="form-label">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              Full Name
+            </label>
+            <input 
+              type="text" 
+              class="form-input readonly-input"
+              [value]="profile.fullName || profile.username"
+              readonly
+              disabled
+            />
+          </div>
+
+          <!-- Phone (Read-only, if available) -->
+          @if (profile.phone) {
+            <div class="form-group">
+              <label class="form-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                </svg>
+                Phone Number
+              </label>
+              <input 
+                type="tel" 
+                class="form-input readonly-input"
+                [value]="profile.phone"
+                readonly
+                disabled
+              />
+            </div>
+          }
+
+          <!-- Bio (Read-only, if available) -->
+          <div class="form-group">
+            <label class="form-label">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+              Bio
+            </label>
+            <textarea 
+              class="form-input form-textarea readonly-input"
+              [value]="profile.bio || 'Chưa có giới thiệu'"
+              readonly
+              disabled
+              rows="4"
+            ></textarea>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  }
+</div>
+
