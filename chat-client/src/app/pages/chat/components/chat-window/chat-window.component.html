@@ -147,9 +147,12 @@
               [class.bubble-received]="msg.senderId !== facade.currentUser().id"
               [class.has-reactions]="msg.reactions && msg.reactions.length > 0"
               [class.revoked]="msg.messageStatus === 'REVOKED'"
-              (touchstart)="onTouchStart(msg)"
-              (touchend)="onTouchEnd(msg)"
-              (touchcancel)="onTouchCancel(msg)">
+              [class.show-status]="msg.showStatus"
+              (touchstart)="onTouchStart($event, msg)"
+              (touchend)="onTouchEnd($event, msg)"
+              (touchmove)="onTouchMove($event, msg)"
+              (touchcancel)="onTouchCancel(msg)"
+              (contextmenu)="$event.preventDefault()">
 
               <!-- [NEW] Inline Action Buttons -->
               @if (shouldShowActions(msg)) {
@@ -369,17 +372,20 @@
               }
             </div>
 
-            <!-- Message Metadata (Timestamp + Status) -->
-            <div class="message-meta">
+            <!-- Message Metadata (Timestamp + Status) - Shows on hover (desktop) or tap (mobile) -->
+            <div class="message-meta" [class.show-status]="msg.showStatus">
               <span class="message-time">{{ msg.timestamp | date:'HH:mm' }}</span>
               
               @if (msg.senderId === facade.currentUser().id) {
                 @if (msg.status === MessageStatus.SEEN) {
                   <i class="fas fa-check-double status-icon seen" title="Seen"></i>
+                  <span class="status-label">Đã xem</span>
                 } @else if (msg.status === MessageStatus.DELIVERED) {
                   <i class="fas fa-check-double status-icon delivered" title="Delivered"></i>
+                  <span class="status-label">Đã nhận</span>
                 } @else {
                   <i class="fas fa-check status-icon sent" title="Sent"></i>
+                  <span class="status-label">Đã gửi</span>
                 }
               }
             </div>

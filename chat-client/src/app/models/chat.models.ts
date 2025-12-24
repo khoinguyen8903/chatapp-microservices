@@ -36,6 +36,8 @@ export interface ChatMessage {
   showReactionBar?: boolean;
   // UI-only helper (custom audio player state)
   isPlaying?: boolean;
+  // UI-only helper (mobile: toggle status info on tap)
+  showStatus?: boolean;
   
   // [NEW] Reply feature
   replyToId?: string;   // ID of the message being replied to

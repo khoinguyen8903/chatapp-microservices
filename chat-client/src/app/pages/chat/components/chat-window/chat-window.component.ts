@@ -59,6 +59,11 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   longPressDuration = 500;
   private longPressTriggered = false;
 
+  // --- Mobile touch handling (Long Press = Menu, Tap = Toggle Status) ---
+  touchTimer: any = null;
+  isLongPress: boolean = false;
+  private touchJustHandled: boolean = false; // Prevent click after touch
+
   // Desktop hover detection (avoid hover behavior on touch devices)
   private readonly isHoverCapable =
     typeof window !== 'undefined' &&
@@ -585,25 +590,75 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     this.hoveredMessageId = null;
   }
 
-  onTouchStart(msg: ChatMessage) {
-    // Mobile: we now open message menu on single tap (bottom sheet),
-    // so don't start long-press timers that feel buggy.
-    if (this.isMobileViewport()) return;
+  // --- Mobile Touch Handling: Long Press = Menu, Tap = Toggle Status ---
+  onTouchStart(event: TouchEvent, msg: ChatMessage) {
+    // Desktop: existing behavior for action buttons (long press to show actions)
+    if (!this.isMobileViewport()) {
+      this.longPressTriggered = false;
+      if (this.pressTimer) clearTimeout(this.pressTimer);
 
-    // Touch devices: long press to show action buttons
-    this.longPressTriggered = false;
-    if (this.pressTimer) clearTimeout(this.pressTimer);
+      this.pressTimer = setTimeout(() => {
+        this.longPressTriggered = true;
+        if (msg.messageStatus !== 'REVOKED') {
+          this.longPressMessageId = msg.id || null;
+        }
+      }, this.longPressDuration);
+      return;
+    }
 
-    this.pressTimer = setTimeout(() => {
-      this.longPressTriggered = true;
-      if (msg.messageStatus !== 'REVOKED') {
-        this.longPressMessageId = msg.id || null;
-      }
-    }, this.longPressDuration);
+    // Mobile: Long press to open context menu, tap to toggle status
+    this.isLongPress = false;
+    if (this.touchTimer) clearTimeout(this.touchTimer);
+
+    this.touchTimer = setTimeout(() => {
+      this.isLongPress = true;
+      // Long press detected → Open context menu (bottom sheet)
+      this.onMobileContextMenu(event, msg);
+    }, 500); // 500ms threshold for long press
   }
 
-  onTouchEnd(_msg: ChatMessage) {
-    // If user releases before duration => normal tap (do nothing)
+  onTouchEnd(event: TouchEvent, msg: ChatMessage) {
+    // Desktop behavior
+    if (!this.isMobileViewport()) {
+      if (this.pressTimer) {
+        clearTimeout(this.pressTimer);
+        this.pressTimer = null;
+      }
+      return;
+    }
+
+    // Mobile: Clear timer and check for tap
+    if (this.touchTimer) {
+      clearTimeout(this.touchTimer);
+      this.touchTimer = null;
+    }
+
+    // If it wasn't a long press, it's a TAP → toggle status info (Time/Seen)
+    if (!this.isLongPress) {
+      // Ignore taps on interactive elements
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('button, a, input, textarea, audio, video, .reaction-bar, .message-actions, .emoji-picker-popover, .context-menu')) {
+        return;
+      }
+      
+      // Toggle showStatus on the message
+      msg.showStatus = !msg.showStatus;
+      this.cdr.markForCheck();
+    }
+
+    // Set flag to prevent click event from opening menu
+    this.touchJustHandled = true;
+    setTimeout(() => {
+      this.touchJustHandled = false;
+    }, 100);
+  }
+
+  onTouchMove(event: TouchEvent, msg: ChatMessage) {
+    // Cancel long press timer if user moves finger (prevents accidental menu open while scrolling)
+    if (this.touchTimer) {
+      clearTimeout(this.touchTimer);
+      this.touchTimer = null;
+    }
     if (this.pressTimer) {
       clearTimeout(this.pressTimer);
       this.pressTimer = null;
@@ -615,7 +670,38 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
       clearTimeout(this.pressTimer);
       this.pressTimer = null;
     }
+    if (this.touchTimer) {
+      clearTimeout(this.touchTimer);
+      this.touchTimer = null;
+    }
     this.longPressMessageId = null;
+    this.isLongPress = false;
+  }
+
+  /**
+   * Mobile context menu (bottom sheet) - triggered by long press
+   */
+  onMobileContextMenu(event: TouchEvent, msg: ChatMessage) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Skip revoked messages
+    if (msg.messageStatus === 'REVOKED') return;
+
+    // Open context menu (bottom sheet on mobile via CSS)
+    this.contextMenuMsg = msg;
+    this.contextMenuVisible = true;
+
+    // Vibration feedback (nice haptic response)
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+
+    // Hide action buttons
+    this.hoveredMessageId = null;
+    this.longPressMessageId = null;
+
+    this.cdr.markForCheck();
   }
 
   /**
@@ -759,33 +845,31 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Mobile: open menu on single tap (bottom sheet).
+   * Mobile: click fallback - now deprecated in favor of touch events.
+   * Touch handling: Long Press = Menu, Tap = Toggle Status
    * Desktop: do nothing (right-click handles it).
    */
   onMobileMessageClick(event: MouseEvent, msg: ChatMessage) {
     if (!this.isMobileViewport()) return;
 
-    // Ignore taps on interactive elements inside the message bubble
+    // If touch events already handled this interaction, skip click handling
+    if (this.touchJustHandled) {
+      return;
+    }
+
+    // Ignore clicks on interactive elements inside the message bubble
     const target = event.target as HTMLElement | null;
     if (target?.closest('button, a, input, textarea, audio, video, .reaction-bar, .message-actions, .emoji-picker-popover, .context-menu')) {
       return;
     }
 
+    // For non-touch devices that still trigger click (rare on mobile),
+    // toggle status as fallback
     event.preventDefault();
     event.stopPropagation();
 
-    // Toggle: tapping the same message closes the menu
-    if (this.contextMenuVisible && this.contextMenuMsg?.id && msg?.id && this.contextMenuMsg.id === msg.id) {
-      this.closeContextMenu();
-      return;
-    }
-
-    this.contextMenuMsg = msg;
-    this.contextMenuVisible = true;
-
-    // Hide action buttons when menu opens
-    this.hoveredMessageId = null;
-    this.longPressMessageId = null;
+    msg.showStatus = !msg.showStatus;
+    this.cdr.markForCheck();
   }
 
   /**

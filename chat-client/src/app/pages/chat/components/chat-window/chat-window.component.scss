@@ -406,6 +406,17 @@
   word-wrap: break-word;
   overflow-wrap: break-word;
 
+  // PREVENT native text selection & menu on mobile
+  -webkit-touch-callout: none; /* iOS Safari */
+  -webkit-user-select: none;   /* Safari */
+  -khtml-user-select: none;    /* Konqueror HTML */
+  -moz-user-select: none;      /* Old Firefox */
+  -ms-user-select: none;       /* Internet Explorer/Edge */
+  user-select: none;           /* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
+  
+  // Ensure the custom menu still works
+  cursor: pointer;
+
   &:hover {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
     transform: translateY(-1px);
@@ -811,7 +822,14 @@
   transform: translateY(4px);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
+  // Desktop: show on hover
   .message-wrapper:hover & {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  // Mobile: show when tapped (showStatus = true)
+  &.show-status {
     opacity: 1;
     transform: translateY(0);
   }
@@ -834,6 +852,14 @@
     &.sent {
       color: #cbd5e1;
     }
+  }
+
+  // Status label text (Đã xem, Đã nhận, Đã gửi)
+  .status-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin-left: 0.125rem;
   }
 }
 
