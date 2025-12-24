@@ -2,6 +2,9 @@ package com.chatapp.chat_service.service;
 
 import com.chatapp.chat_service.client.UserClient;
 import com.chatapp.chat_service.dto.UserDTO;
+import com.chatapp.chat_service.enums.MessageStatus;
+import com.chatapp.chat_service.enums.MessageType;
+import com.chatapp.chat_service.model.ChatMessage;
 import com.chatapp.chat_service.model.ChatRoom;
 import com.chatapp.chat_service.repository.ChatMessageRepository;
 import com.chatapp.chat_service.repository.ChatRoomRepository;
@@ -65,10 +68,12 @@ public class ChatRoomService {
 
         ChatRoom groupRoom = ChatRoom.builder()
                 .chatId(chatId)
-                .adminId(adminId)
+                .adminId(adminId)  // Keep for backward compatibility
+                .ownerId(adminId)  // [NEW] Set ownerId when creating group
                 .groupName(groupName)
                 .isGroup(true)
                 .memberIds(memberIds)
+                .adminIds(new ArrayList<>())  // [NEW] Initialize empty admin list
                 .build();
 
         return chatRoomRepository.save(groupRoom);
@@ -317,5 +322,366 @@ public class ChatRoomService {
         }
         
         return members;
+    }
+
+    // =============================================
+    // ROLE MANAGEMENT METHODS
+    // =============================================
+
+    /**
+     * Get user's role in a group room.
+     * Returns: 'OWNER', 'ADMIN', or 'MEMBER'
+     */
+    public String getRole(String roomId, String userId) {
+        Optional<ChatRoom> roomOpt = chatRoomRepository.findByChatId(roomId);
+        
+        if (roomOpt.isEmpty()) {
+            throw new RuntimeException("Room not found: " + roomId);
+        }
+        
+        ChatRoom room = roomOpt.get();
+        
+        if (!room.isGroup()) {
+            throw new RuntimeException("Room is not a group: " + roomId);
+        }
+        
+        // Check if user is owner
+        String ownerId = room.getOwnerId() != null ? room.getOwnerId() : room.getAdminId(); // Fallback to adminId for backward compatibility
+        if (ownerId != null && ownerId.equals(userId)) {
+            return "OWNER";
+        }
+        
+        // Check if user is admin
+        if (room.getAdminIds() != null && room.getAdminIds().contains(userId)) {
+            return "ADMIN";
+        }
+        
+        // Default to member
+        return "MEMBER";
+    }
+
+    /**
+     * Promote or demote a user to/from admin role.
+     * Only OWNER can perform this action.
+     */
+    public ChatRoom promoteOrDemoteAdmin(String roomId, String currentUserId, String targetUserId, String action) {
+        Optional<ChatRoom> roomOpt = chatRoomRepository.findByChatId(roomId);
+        
+        if (roomOpt.isEmpty()) {
+            throw new RuntimeException("Room not found: " + roomId);
+        }
+        
+        ChatRoom room = roomOpt.get();
+        
+        if (!room.isGroup()) {
+            throw new RuntimeException("Room is not a group: " + roomId);
+        }
+        
+        // Check permission: Only OWNER can promote/demote
+        String currentRole = getRole(roomId, currentUserId);
+        if (!"OWNER".equals(currentRole)) {
+            throw new RuntimeException("Only OWNER can promote/demote admins");
+        }
+        
+        // Ensure target user is a member
+        if (room.getMemberIds() == null || !room.getMemberIds().contains(targetUserId)) {
+            throw new RuntimeException("Target user is not a member of this group");
+        }
+        
+        // Cannot promote/demote owner
+        String ownerId = room.getOwnerId() != null ? room.getOwnerId() : room.getAdminId();
+        if (ownerId != null && ownerId.equals(targetUserId)) {
+            throw new RuntimeException("Cannot promote/demote the owner");
+        }
+        
+        // Initialize adminIds if null
+        if (room.getAdminIds() == null) {
+            room.setAdminIds(new ArrayList<>());
+        }
+        
+        if ("PROMOTE".equals(action)) {
+            // Add to admin list if not already admin
+            if (!room.getAdminIds().contains(targetUserId)) {
+                room.getAdminIds().add(targetUserId);
+                System.out.println("✅ [ChatRoomService] Promoted user " + targetUserId + " to ADMIN in room " + roomId);
+            }
+        } else if ("DEMOTE".equals(action)) {
+            // Remove from admin list
+            room.getAdminIds().remove(targetUserId);
+            System.out.println("✅ [ChatRoomService] Demoted user " + targetUserId + " from ADMIN in room " + roomId);
+        } else {
+            throw new RuntimeException("Invalid action: " + action + ". Must be 'PROMOTE' or 'DEMOTE'");
+        }
+        
+        return chatRoomRepository.save(room);
+    }
+
+    /**
+     * Kick a member from the group.
+     * Permission matrix:
+     * - OWNER: Can kick ADMIN and MEMBER
+     * - ADMIN: Can kick MEMBER only
+     * - MEMBER: Cannot kick anyone
+     * 
+     * Creates a system message before removing the user.
+     * Returns a Map with the updated room and system message.
+     */
+    public Map<String, Object> kickMember(String roomId, String currentUserId, String targetUserId) {
+        Optional<ChatRoom> roomOpt = chatRoomRepository.findByChatId(roomId);
+        
+        if (roomOpt.isEmpty()) {
+            throw new RuntimeException("Room not found: " + roomId);
+        }
+        
+        ChatRoom room = roomOpt.get();
+        
+        if (!room.isGroup()) {
+            throw new RuntimeException("Room is not a group: " + roomId);
+        }
+        
+        // Check permission
+        String currentRole = getRole(roomId, currentUserId);
+        String targetRole = getRole(roomId, targetUserId);
+        
+        if ("MEMBER".equals(currentRole)) {
+            throw new RuntimeException("Members cannot kick other users");
+        }
+        
+        // Cannot kick owner
+        String ownerId = room.getOwnerId() != null ? room.getOwnerId() : room.getAdminId();
+        if (ownerId != null && ownerId.equals(targetUserId)) {
+            throw new RuntimeException("Cannot kick the owner");
+        }
+        
+        // ADMIN can only kick MEMBER
+        if ("ADMIN".equals(currentRole) && !"MEMBER".equals(targetRole)) {
+            throw new RuntimeException("Admins can only kick members");
+        }
+        
+        // [NEW] Create system message BEFORE removing user (so they can see it)
+        ChatMessage systemMessage = null;
+        try {
+            String kickedUserName = "User";
+            try {
+                UserDTO kickedUser = userClient.getUserById(targetUserId);
+                if (kickedUser != null && kickedUser.getUsername() != null) {
+                    kickedUserName = kickedUser.getUsername();
+                }
+            } catch (Exception e) {
+                System.err.println("⚠️ [ChatRoomService] Could not fetch kicked user name: " + e.getMessage());
+            }
+            
+            // Always show who was kicked (not who did the kicking)
+            String systemMessageContent = kickedUserName + " đã bị mời ra khỏi nhóm";
+            
+            systemMessage = ChatMessage.builder()
+                    .chatId(roomId)
+                    .senderId("SYSTEM")
+                    .recipientId(roomId)
+                    .content(systemMessageContent)
+                    .type(MessageType.SYSTEM)
+                    .status(MessageStatus.SEEN) // System messages are always "seen"
+                    .timestamp(new Date())
+                    .build();
+            
+            systemMessage = chatMessageRepository.save(systemMessage);
+            System.out.println("📢 [ChatRoomService] Created system message for kick: " + systemMessageContent);
+        } catch (Exception e) {
+            System.err.println("⚠️ [ChatRoomService] Failed to create system message: " + e.getMessage());
+            // Continue with kick even if system message fails
+        }
+        
+        // Remove from memberIds
+        if (room.getMemberIds() != null) {
+            room.getMemberIds().remove(targetUserId);
+        }
+        
+        // Remove from adminIds if they were an admin
+        if (room.getAdminIds() != null) {
+            room.getAdminIds().remove(targetUserId);
+        }
+        
+        ChatRoom updatedRoom = chatRoomRepository.save(room);
+        System.out.println("✅ [ChatRoomService] Kicked user " + targetUserId + " from room " + roomId);
+        
+        // Return both room and system message
+        Map<String, Object> result = new HashMap<>();
+        result.put("room", updatedRoom);
+        result.put("systemMessage", systemMessage);
+        return result;
+    }
+
+    /**
+     * Leave the group.
+     * Constraint: OWNER cannot leave. They must delete the group or transfer ownership first.
+     */
+    public ChatRoom leaveGroup(String roomId, String userId) {
+        Optional<ChatRoom> roomOpt = chatRoomRepository.findByChatId(roomId);
+        
+        if (roomOpt.isEmpty()) {
+            throw new RuntimeException("Room not found: " + roomId);
+        }
+        
+        ChatRoom room = roomOpt.get();
+        
+        if (!room.isGroup()) {
+            throw new RuntimeException("Room is not a group: " + roomId);
+        }
+        
+        // Check if user is owner
+        String currentRole = getRole(roomId, userId);
+        if ("OWNER".equals(currentRole)) {
+            throw new RuntimeException("Owner cannot leave the group. Please delete the group or transfer ownership first.");
+        }
+        
+        // Remove from memberIds
+        if (room.getMemberIds() != null) {
+            room.getMemberIds().remove(userId);
+        }
+        
+        // Remove from adminIds if they were an admin
+        if (room.getAdminIds() != null) {
+            room.getAdminIds().remove(userId);
+        }
+        
+        System.out.println("✅ [ChatRoomService] User " + userId + " left room " + roomId);
+        return chatRoomRepository.save(room);
+    }
+
+    /**
+     * Delete the group.
+     * Only OWNER can delete.
+     * This will hard delete the room and all associated messages.
+     */
+    public void deleteGroup(String roomId, String userId) {
+        Optional<ChatRoom> roomOpt = chatRoomRepository.findByChatId(roomId);
+        
+        if (roomOpt.isEmpty()) {
+            throw new RuntimeException("Room not found: " + roomId);
+        }
+        
+        ChatRoom room = roomOpt.get();
+        
+        if (!room.isGroup()) {
+            throw new RuntimeException("Room is not a group: " + roomId);
+        }
+        
+        // Check permission: Only OWNER can delete
+        String currentRole = getRole(roomId, userId);
+        if (!"OWNER".equals(currentRole)) {
+            throw new RuntimeException("Only OWNER can delete the group");
+        }
+        
+        // Delete all messages in this room
+        chatMessageRepository.deleteByChatId(roomId);
+        System.out.println("🗑️ [ChatRoomService] Deleted all messages for room " + roomId);
+        
+        // Delete the room
+        chatRoomRepository.delete(room);
+        System.out.println("🗑️ [ChatRoomService] Deleted group room " + roomId);
+    }
+
+    /**
+     * Add members to a group.
+     * Only OWNER or ADMIN can add members.
+     * Creates a system message and returns the updated room with system message info.
+     */
+    public Map<String, Object> addMembers(String roomId, String currentUserId, List<String> newUserIds) {
+        Optional<ChatRoom> roomOpt = chatRoomRepository.findByChatId(roomId);
+        
+        if (roomOpt.isEmpty()) {
+            throw new RuntimeException("Room not found: " + roomId);
+        }
+        
+        ChatRoom room = roomOpt.get();
+        
+        if (!room.isGroup()) {
+            throw new RuntimeException("Room is not a group: " + roomId);
+        }
+        
+        // Check permission: Only OWNER or ADMIN can add members
+        String currentRole = getRole(roomId, currentUserId);
+        if (!"OWNER".equals(currentRole) && !"ADMIN".equals(currentRole)) {
+            throw new RuntimeException("Only OWNER or ADMIN can add members");
+        }
+        
+        // Filter out users who are already members
+        List<String> existingMemberIds = room.getMemberIds() != null ? room.getMemberIds() : new ArrayList<>();
+        List<String> usersToAdd = new ArrayList<>();
+        for (String userId : newUserIds) {
+            if (!existingMemberIds.contains(userId)) {
+                usersToAdd.add(userId);
+            }
+        }
+        
+        if (usersToAdd.isEmpty()) {
+            throw new RuntimeException("All users are already members of this group");
+        }
+        
+        // Add new members
+        if (room.getMemberIds() == null) {
+            room.setMemberIds(new ArrayList<>());
+        }
+        room.getMemberIds().addAll(usersToAdd);
+        
+        // Save updated room
+        ChatRoom updatedRoom = chatRoomRepository.save(room);
+        
+        // [NEW] Create system message
+        ChatMessage systemMessage = null;
+        try {
+            // Get current user name
+            String currentUserName = "Admin";
+            try {
+                UserDTO currentUser = userClient.getUserById(currentUserId);
+                if (currentUser != null && currentUser.getUsername() != null) {
+                    currentUserName = currentUser.getUsername();
+                }
+            } catch (Exception e) {
+                System.err.println("⚠️ [ChatRoomService] Could not fetch current user name: " + e.getMessage());
+            }
+            
+            // Get new member names
+            List<String> newMemberNames = new ArrayList<>();
+            for (String userId : usersToAdd) {
+                try {
+                    UserDTO user = userClient.getUserById(userId);
+                    if (user != null && user.getUsername() != null) {
+                        newMemberNames.add(user.getUsername());
+                    } else {
+                        newMemberNames.add("User " + userId.substring(0, Math.min(8, userId.length())));
+                    }
+                } catch (Exception e) {
+                    newMemberNames.add("User " + userId.substring(0, Math.min(8, userId.length())));
+                }
+            }
+            
+            String membersList = String.join(", ", newMemberNames);
+            String systemMessageContent = currentUserName + " đã thêm " + membersList + " vào nhóm";
+            
+            systemMessage = ChatMessage.builder()
+                    .chatId(roomId)
+                    .senderId("SYSTEM")
+                    .recipientId(roomId)
+                    .content(systemMessageContent)
+                    .type(MessageType.SYSTEM)
+                    .status(MessageStatus.SEEN)
+                    .timestamp(new Date())
+                    .build();
+            
+            systemMessage = chatMessageRepository.save(systemMessage);
+            System.out.println("📢 [ChatRoomService] Created system message for add members: " + systemMessageContent);
+        } catch (Exception e) {
+            System.err.println("⚠️ [ChatRoomService] Failed to create system message: " + e.getMessage());
+            // Continue even if system message fails
+        }
+        
+        // Return result with system message
+        Map<String, Object> result = new HashMap<>();
+        result.put("room", updatedRoom);
+        result.put("systemMessage", systemMessage);
+        result.put("addedUserIds", usersToAdd);
+        
+        return result;
     }
 }

@@ -6,7 +6,8 @@ export enum MessageType {
   IMAGE = 'IMAGE',
   VIDEO = 'VIDEO',
   FILE = 'FILE',
-  AUDIO = 'AUDIO'
+  AUDIO = 'AUDIO',
+  SYSTEM = 'SYSTEM'  // [NEW] System messages for group events
 }
 export enum MessageStatus {
   SENT = 'SENT',
@@ -60,7 +61,9 @@ export interface ChatRoom {
   // Các trường Group từ Java Backend
   isGroup: boolean;     // [QUAN TRỌNG] Khớp với @JsonProperty("isGroup")
   groupName?: string;
-  adminId?: string;
+  adminId?: string;     // [DEPRECATED] Keep for backward compatibility
+  ownerId?: string;     // [NEW] Owner (Trưởng nhóm)
+  adminIds?: string[];  // [NEW] List of Admins (Phó nhóm)
   memberIds?: string[]; // Backend trả về List<String>
   
   // [UNREAD MESSAGE FIELDS] Must match Java ChatRoom

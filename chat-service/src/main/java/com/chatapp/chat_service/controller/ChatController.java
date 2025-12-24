@@ -1,6 +1,9 @@
 package com.chatapp.chat_service.controller;
 
+import com.chatapp.chat_service.dto.AddMembersRequest;
+import com.chatapp.chat_service.dto.KickMemberRequest;
 import com.chatapp.chat_service.dto.ReactionRequest;
+import com.chatapp.chat_service.dto.RoleActionRequest;
 import com.chatapp.chat_service.enums.MessageStatus;
 import com.chatapp.chat_service.enums.MessageType;
 import com.chatapp.chat_service.model.ChatMessage;
@@ -606,6 +609,349 @@ public class ChatController {
             System.err.println("❌ [ChatController] Error getting group members: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.ok(new java.util.ArrayList<>());
+        }
+    }
+
+    // =============================================
+    // GROUP ROLE MANAGEMENT APIs
+    // =============================================
+
+    /**
+     * API 1: Promote/Demote Admin
+     * PUT /api/rooms/{id}/role
+     * Body: { targetUserId: string, action: 'PROMOTE' | 'DEMOTE' }
+     * Permission: Only OWNER can perform this.
+     */
+    @PutMapping("/rooms/{id}/role")
+    public ResponseEntity<Map<String, Object>> updateRole(
+            @PathVariable("id") String roomId,
+            @RequestBody RoleActionRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId) {
+        try {
+            if (currentUserId == null || currentUserId.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "error", "User ID is required in X-User-Id header"
+                ));
+            }
+
+            System.out.println("👑 [ChatController] Role update request - Room: " + roomId + 
+                             ", User: " + currentUserId + ", Target: " + request.getTargetUserId() + 
+                             ", Action: " + request.getAction());
+
+            ChatRoom updatedRoom = chatRoomService.promoteOrDemoteAdmin(
+                    roomId, currentUserId, request.getTargetUserId(), request.getAction());
+
+            // Broadcast WebSocket event
+            broadcastRoomUpdate(roomId, updatedRoom);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Role updated successfully",
+                    "room", updatedRoom
+            ));
+        } catch (RuntimeException e) {
+            System.err.println("❌ [ChatController] Error updating role: " + e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Unexpected error: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", "Internal server error"
+            ));
+        }
+    }
+
+    /**
+     * API 2: Kick Member
+     * PUT /api/rooms/{id}/kick
+     * Body: { targetUserId: string }
+     * Permission: OWNER can kick ADMIN and MEMBER. ADMIN can kick MEMBER only.
+     */
+    @PutMapping("/rooms/{id}/kick")
+    public ResponseEntity<Map<String, Object>> kickMember(
+            @PathVariable("id") String roomId,
+            @RequestBody KickMemberRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId) {
+        try {
+            if (currentUserId == null || currentUserId.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "error", "User ID is required in X-User-Id header"
+                ));
+            }
+
+            System.out.println("👢 [ChatController] Kick request - Room: " + roomId + 
+                             ", User: " + currentUserId + ", Target: " + request.getTargetUserId());
+
+            Map<String, Object> kickResult = chatRoomService.kickMember(
+                    roomId, currentUserId, request.getTargetUserId());
+            
+            ChatRoom updatedRoom = (ChatRoom) kickResult.get("room");
+            ChatMessage systemMessage = (ChatMessage) kickResult.get("systemMessage");
+
+            // Broadcast WebSocket event with system message
+            Map<String, Object> kickEvent = new java.util.HashMap<>();
+            kickEvent.put("type", "MEMBER_REMOVED");
+            kickEvent.put("roomId", roomId);
+            kickEvent.put("kickedUserId", request.getTargetUserId());
+            kickEvent.put("room", updatedRoom);
+            if (systemMessage != null) {
+                kickEvent.put("systemMessage", systemMessage);
+            }
+            
+            // Broadcast to room topic
+            messagingTemplate.convertAndSend("/topic/chat-room/" + roomId + "/updated", kickEvent);
+            
+            // Also notify all members via their personal topics
+            if (updatedRoom.getMemberIds() != null) {
+                for (String memberId : updatedRoom.getMemberIds()) {
+                    messagingTemplate.convertAndSend("/topic/" + memberId, kickEvent);
+                }
+            }
+            
+            // Notify the kicked user (even if they're no longer in memberIds)
+            messagingTemplate.convertAndSend("/topic/" + request.getTargetUserId(), kickEvent);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Member kicked successfully",
+                    "room", updatedRoom,
+                    "systemMessage", systemMessage != null ? systemMessage : Map.of()
+            ));
+        } catch (RuntimeException e) {
+            System.err.println("❌ [ChatController] Error kicking member: " + e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Unexpected error: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", "Internal server error"
+            ));
+        }
+    }
+
+    /**
+     * API 3: Leave Group
+     * PUT /api/rooms/{id}/leave
+     * Constraint: OWNER cannot leave. They must delete the group or transfer ownership first.
+     */
+    @PutMapping("/rooms/{id}/leave")
+    public ResponseEntity<Map<String, Object>> leaveGroup(
+            @PathVariable("id") String roomId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        try {
+            if (userId == null || userId.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "error", "User ID is required in X-User-Id header"
+                ));
+            }
+
+            System.out.println("🚪 [ChatController] Leave request - Room: " + roomId + ", User: " + userId);
+
+            ChatRoom updatedRoom = chatRoomService.leaveGroup(roomId, userId);
+
+            // Broadcast WebSocket event
+            broadcastRoomUpdate(roomId, updatedRoom);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Left group successfully",
+                    "room", updatedRoom
+            ));
+        } catch (RuntimeException e) {
+            System.err.println("❌ [ChatController] Error leaving group: " + e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Unexpected error: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", "Internal server error"
+            ));
+        }
+    }
+
+    /**
+     * API 4: Delete Group
+     * DELETE /api/rooms/{id}
+     * Permission: Only OWNER can delete.
+     */
+    @DeleteMapping("/rooms/{id}")
+    public ResponseEntity<Map<String, Object>> deleteGroup(
+            @PathVariable("id") String roomId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        try {
+            if (userId == null || userId.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "error", "User ID is required in X-User-Id header"
+                ));
+            }
+
+            System.out.println("🗑️ [ChatController] Delete group request - Room: " + roomId + ", User: " + userId);
+
+            chatRoomService.deleteGroup(roomId, userId);
+
+            // Broadcast WebSocket event to notify all members
+            Map<String, Object> deleteEvent = new java.util.HashMap<>();
+            deleteEvent.put("eventType", "ROOM_DELETED");
+            deleteEvent.put("roomId", roomId);
+            
+            // Get room members before deletion (we need to do this before deleteGroup)
+            Optional<ChatRoom> roomOpt = chatRoomService.findByChatId(roomId);
+            if (roomOpt.isPresent()) {
+                ChatRoom room = roomOpt.get();
+                if (room.getMemberIds() != null) {
+                    for (String memberId : room.getMemberIds()) {
+                        messagingTemplate.convertAndSend("/topic/" + memberId, deleteEvent);
+                    }
+                }
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Group deleted successfully"
+            ));
+        } catch (RuntimeException e) {
+            System.err.println("❌ [ChatController] Error deleting group: " + e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Unexpected error: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", "Internal server error"
+            ));
+        }
+    }
+
+    /**
+     * API 5: Add Members to Group
+     * PUT /api/rooms/{id}/add
+     * Body: { userIds: string[] }
+     * Permission: Only OWNER or ADMIN can add members.
+     */
+    @PutMapping("/rooms/{id}/add")
+    public ResponseEntity<Map<String, Object>> addMembers(
+            @PathVariable("id") String roomId,
+            @RequestBody AddMembersRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId) {
+        try {
+            if (currentUserId == null || currentUserId.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "error", "User ID is required in X-User-Id header"
+                ));
+            }
+
+            if (request.getUserIds() == null || request.getUserIds().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "error", "User IDs are required"
+                ));
+            }
+
+            System.out.println("➕ [ChatController] Add members request - Room: " + roomId + 
+                             ", User: " + currentUserId + ", New Members: " + request.getUserIds());
+
+            Map<String, Object> result = chatRoomService.addMembers(
+                    roomId, currentUserId, request.getUserIds());
+
+            ChatRoom updatedRoom = (ChatRoom) result.get("room");
+            ChatMessage systemMessage = (ChatMessage) result.get("systemMessage");
+            @SuppressWarnings("unchecked")
+            List<String> addedUserIds = (List<String>) result.get("addedUserIds");
+
+            // Broadcast WebSocket event
+            Map<String, Object> addEvent = new java.util.HashMap<>();
+            addEvent.put("type", "MEMBERS_ADDED");
+            addEvent.put("roomId", roomId);
+            addEvent.put("room", updatedRoom);
+            addEvent.put("addedUserIds", addedUserIds);
+            if (systemMessage != null) {
+                addEvent.put("systemMessage", systemMessage);
+            }
+            
+            // Broadcast to room topic
+            messagingTemplate.convertAndSend("/topic/chat-room/" + roomId + "/updated", addEvent);
+            
+            // Notify all existing members
+            if (updatedRoom.getMemberIds() != null) {
+                for (String memberId : updatedRoom.getMemberIds()) {
+                    messagingTemplate.convertAndSend("/topic/" + memberId, addEvent);
+                }
+            }
+            
+            // Also notify new members specifically so the group appears in their sidebar
+            for (String newUserId : addedUserIds) {
+                Map<String, Object> newMemberEvent = new java.util.HashMap<>();
+                newMemberEvent.put("type", "ROOM_ADDED");
+                newMemberEvent.put("room", updatedRoom);
+                messagingTemplate.convertAndSend("/topic/" + newUserId, newMemberEvent);
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Members added successfully",
+                    "room", updatedRoom,
+                    "systemMessage", systemMessage != null ? systemMessage : Map.of(),
+                    "addedUserIds", addedUserIds
+            ));
+        } catch (RuntimeException e) {
+            System.err.println("❌ [ChatController] Error adding members: " + e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Unexpected error: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", "Internal server error"
+            ));
+        }
+    }
+
+    /**
+     * Helper method to broadcast room update via WebSocket
+     */
+    private void broadcastRoomUpdate(String roomId, ChatRoom room) {
+        try {
+            // Broadcast to room-specific topic
+            messagingTemplate.convertAndSend("/topic/chat-room/" + roomId + "/updated", room);
+            
+            // Also notify all members via their personal topics
+            Map<String, Object> updateEvent = new java.util.HashMap<>();
+            updateEvent.put("eventType", "ROOM_UPDATED");
+            updateEvent.put("roomId", roomId);
+            updateEvent.put("room", room);
+            
+            if (room.getMemberIds() != null) {
+                for (String memberId : room.getMemberIds()) {
+                    messagingTemplate.convertAndSend("/topic/" + memberId, updateEvent);
+                }
+            }
+            
+            System.out.println("📢 [ChatController] Broadcasted room update for: " + roomId);
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Failed to broadcast room update: " + e.getMessage());
         }
     }
 }

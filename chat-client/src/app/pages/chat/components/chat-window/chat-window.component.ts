@@ -49,7 +49,7 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
 
   // --- GROUP MEMBERS STATE ---
   showGroupMembers = false;
-  groupMembers: Array<{ id: string; username: string; avatarUrl?: string }> = [];
+  groupMembers: Array<{ id: string; username: string; fullName?: string; avatarUrl?: string }> = [];
   isLoadingMembers = false;
 
   // --- MUTE STATE ---
@@ -200,6 +200,7 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
 
     // Android Chrome specific: Listen for focus/blur events on inputs
     this.setupAndroidKeyboardHandling();
+
   }
 
   // ✅ Mobile: Handle viewport height changes for virtual keyboard
@@ -1334,6 +1335,7 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     }
   }
 
+
   loadGroupMembers() {
     const session = this.facade.selectedSession();
     if (!session || session.type !== 'GROUP') return;
@@ -1367,12 +1369,313 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Get display name for member (fullName or username)
+   */
+  getMemberDisplayName(member: { id: string; username: string; fullName?: string; avatarUrl?: string }): string {
+    return member.fullName || member.username;
+  }
+
+  /**
    * Get the partner ID for private chats (used for profile link)
    */
   getPartnerId(): string | null {
     const session = this.facade.selectedSession();
     if (!session || session.type !== 'PRIVATE') return null;
     return session.id; // In private chats, session.id is the partner's ID
+  }
+
+  // =============================================
+  // ROLE MANAGEMENT HELPERS
+  // =============================================
+
+  /**
+   * Get current room data (helper method)
+   * Returns null if session is null, not a group, or room not found
+   */
+  private getCurrentRoom(): any | null {
+    try {
+      const session = this.facade.selectedSession();
+      
+      // Early return if no session
+      if (!session) {
+        return null;
+      }
+
+      // Only process GROUP sessions
+      if (session.type !== 'GROUP') {
+        return null;
+      }
+
+      // Safely access session.id with optional chaining
+      const sessionId = session?.id;
+      if (!sessionId) {
+        return null;
+      }
+
+      // Try to get from rawRooms (accessing private member via type assertion)
+      try {
+        const rawRoomsSignal = (this.facade as any).rawRooms;
+        if (!rawRoomsSignal) {
+          return null;
+        }
+
+        const rooms = rawRoomsSignal() || [];
+        if (!Array.isArray(rooms) || rooms.length === 0) {
+          return null;
+        }
+
+        // Find room matching session ID
+        return rooms.find((r: any) => {
+          if (!r) return false;
+          return r.chatId === sessionId || r.id === sessionId;
+        }) || null;
+      } catch (error) {
+        console.warn('⚠️ [ChatWindow] Error accessing rawRooms:', error);
+        return null;
+      }
+    } catch (error) {
+      console.warn('⚠️ [ChatWindow] Error in getCurrentRoom:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get current user's role in the selected group
+   * Returns: 'OWNER', 'ADMIN', or 'MEMBER'
+   */
+  getMyRole(): string | null {
+    const session = this.facade.selectedSession();
+    if (!session || session.type !== 'GROUP') return null;
+
+    const currentUserId = this.facade.currentUser()?.id;
+    if (!currentUserId) return null;
+
+    const room = this.getCurrentRoom();
+    if (!room || !room.isGroup) return null;
+
+    // Check if owner
+    const ownerId = room.ownerId || room.adminId; // Fallback to adminId for backward compatibility
+    if (ownerId === currentUserId) return 'OWNER';
+
+    // Check if admin
+    if (room.adminIds && room.adminIds.includes(currentUserId)) return 'ADMIN';
+
+    // Default to member
+    return 'MEMBER';
+  }
+
+  /**
+   * Get a member's role in the group
+   */
+  getMemberRole(memberId: string): string {
+    const session = this.facade.selectedSession();
+    if (!session || session.type !== 'GROUP') return 'MEMBER';
+
+    const room = this.getCurrentRoom();
+    if (!room || !room.isGroup) return 'MEMBER';
+
+    const ownerId = room.ownerId || room.adminId;
+    if (ownerId === memberId) return 'OWNER';
+
+    if (room.adminIds && room.adminIds.includes(memberId)) return 'ADMIN';
+
+    return 'MEMBER';
+  }
+
+  /**
+   * Check if current user can manage (kick) a target user
+   * Returns true if myRole > targetUserRole
+   */
+  canManageUser(targetUserId: string): boolean {
+    const myRole = this.getMyRole();
+    if (!myRole) return false;
+
+    const targetRole = this.getMemberRole(targetUserId);
+    
+    // Role hierarchy: OWNER > ADMIN > MEMBER
+    const roleHierarchy: { [key: string]: number } = {
+      'OWNER': 3,
+      'ADMIN': 2,
+      'MEMBER': 1
+    };
+
+    return (roleHierarchy[myRole] || 0) > (roleHierarchy[targetRole] || 0);
+  }
+
+  /**
+   * Check if current user can promote/demote a target user
+   * Returns true if I am OWNER
+   */
+  canPromote(targetUserId: string): boolean {
+    return this.getMyRole() === 'OWNER';
+  }
+
+  /**
+   * Check if target user is an admin
+   */
+  isAdmin(memberId: string): boolean {
+    return this.getMemberRole(memberId) === 'ADMIN';
+  }
+
+  // =============================================
+  // ROLE MANAGEMENT ACTIONS
+  // =============================================
+
+  /**
+   * Promote a member to admin
+   */
+  promoteToAdmin(memberId: string) {
+    const session = this.facade.selectedSession();
+    if (!session || session.type !== 'GROUP') return;
+
+    const roomId = session.id;
+    this.chatService.updateRole(roomId, memberId, 'PROMOTE').subscribe({
+      next: () => {
+        console.log('✅ Promoted user to admin');
+        this.loadGroupMembers(); // Reload members list
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('❌ Error promoting user:', err);
+        alert(err.error?.error || 'Không thể thăng chức thành viên');
+      }
+    });
+  }
+
+  /**
+   * Demote an admin to member
+   */
+  demoteFromAdmin(memberId: string) {
+    const session = this.facade.selectedSession();
+    if (!session || session.type !== 'GROUP') return;
+
+    const roomId = session.id;
+    this.chatService.updateRole(roomId, memberId, 'DEMOTE').subscribe({
+      next: () => {
+        console.log('✅ Demoted admin to member');
+        this.loadGroupMembers(); // Reload members list
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('❌ Error demoting user:', err);
+        alert(err.error?.error || 'Không thể bãi nhiệm thành viên');
+      }
+    });
+  }
+
+  /**
+   * Kick a member from the group
+   */
+  kickMember(memberId: string) {
+    const session = this.facade.selectedSession();
+    if (!session || session.type !== 'GROUP') return;
+
+    if (!confirm('Bạn có chắc chắn muốn mời thành viên này khỏi nhóm?')) {
+      return;
+    }
+
+    const roomId = session.id;
+    this.chatService.kickMember(roomId, memberId).subscribe({
+      next: () => {
+        console.log('✅ Kicked member from group');
+        this.loadGroupMembers(); // Reload members list
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('❌ Error kicking member:', err);
+        alert(err.error?.error || 'Không thể mời thành viên khỏi nhóm');
+      }
+    });
+  }
+
+  /**
+   * Leave the group
+   */
+  leaveGroup() {
+    const session = this.facade.selectedSession();
+    if (!session || session.type !== 'GROUP') return;
+
+    if (!confirm('Bạn có chắc chắn muốn rời nhóm này?')) {
+      return;
+    }
+
+    const roomId = session.id;
+    this.chatService.leaveGroup(roomId).subscribe({
+      next: () => {
+        console.log('✅ Left group');
+        // Navigate back to sidebar or close chat
+        this.facade.selectSession(null);
+        this.closeRightSidebar();
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('❌ Error leaving group:', err);
+        alert(err.error?.error || 'Không thể rời nhóm');
+      }
+    });
+  }
+
+  // =============================================
+  // ADD MEMBER MODAL
+  // =============================================
+
+  /**
+   * Add members to group (simplified - using prompt)
+   */
+  openAddMemberModal() {
+    const session = this.facade.selectedSession();
+    if (!session || session.type !== 'GROUP') return;
+
+    // Simple prompt for now - user enters comma-separated user IDs
+    const input = window.prompt('Nhập ID người dùng (phân cách bằng dấu phẩy):');
+    if (!input || !input.trim()) return;
+
+    const userIds = input.split(',').map(id => id.trim()).filter(id => id.length > 0);
+    if (userIds.length === 0) {
+      alert('Vui lòng nhập ít nhất một ID người dùng');
+      return;
+    }
+
+    const roomId = session.id;
+    this.chatService.addMembers(roomId, userIds).subscribe({
+      next: () => {
+        console.log('✅ Added members to group');
+        this.loadGroupMembers(); // Reload members list
+        this.facade.loadRooms(); // Reload rooms to update member count
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('❌ Error adding members:', err);
+        alert(err.error?.error || 'Không thể thêm thành viên');
+      }
+    });
+  }
+
+  /**
+   * Delete the group (only owner can do this)
+   */
+  deleteGroup() {
+    const session = this.facade.selectedSession();
+    if (!session || session.type !== 'GROUP') return;
+
+    if (!confirm('Bạn có chắc chắn muốn giải tán nhóm này? Hành động này không thể hoàn tác!')) {
+      return;
+    }
+
+    const roomId = session.id;
+    this.chatService.deleteGroup(roomId).subscribe({
+      next: () => {
+        console.log('✅ Deleted group');
+        // Navigate back to sidebar
+        this.facade.selectSession(null);
+        this.closeRightSidebar();
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('❌ Error deleting group:', err);
+        alert(err.error?.error || 'Không thể giải tán nhóm');
+      }
+    });
   }
 
   // --- MEDIA & FILES SECTION ---

@@ -32,7 +32,10 @@ public class ChatRoom {
     private boolean isGroup;
 
     private String groupName;
-    private String adminId;
+    private String adminId;  // [DEPRECATED] Keep for backward compatibility, use ownerId instead
+    private String ownerId;  // [NEW] Owner (Trưởng nhóm) - Only one owner per group
+    @Builder.Default
+    private List<String> adminIds = new java.util.ArrayList<>();  // [NEW] List of Admins (Phó nhóm)
     private List<String> memberIds;
     
     // --- [UNREAD MESSAGE PREVIEW FIELDS] ---

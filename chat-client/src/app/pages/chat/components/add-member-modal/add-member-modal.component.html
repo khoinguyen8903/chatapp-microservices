@@ -1,0 +1,123 @@
+<div class="modal-backdrop" (click)="close()"></div>
+<div class="modal-container" (click)="$event.stopPropagation()">
+  
+  <div class="modal-header">
+    <h3 class="modal-title">Thêm thành viên</h3>
+    <button (click)="close()" class="modal-close-btn" aria-label="Close">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+
+  <div class="modal-content">
+    <!-- Search Bar -->
+    <div class="search-section">
+      <div class="search-wrapper">
+        <i class="fas fa-search search-icon"></i>
+        <input 
+          type="text" 
+          [(ngModel)]="searchTerm" 
+          (input)="searchUser()"
+          (keyup.enter)="searchUser()"
+          placeholder="Tìm tên hoặc email..."
+          class="search-input"
+          [disabled]="isSearching">
+        @if (isSearching) {
+          <i class="fas fa-spinner fa-spin search-loading"></i>
+        }
+      </div>
+      @if (searchTerm && !isSearching) {
+        <button (click)="searchUser()" class="search-btn">
+          <i class="fas fa-search"></i>
+        </button>
+      }
+    </div>
+
+    <!-- Search Results -->
+    @if (foundUsers.length > 0) {
+      <div class="results-section">
+        <h4 class="results-title">Kết quả tìm kiếm</h4>
+        <div class="users-list">
+          @for (user of foundUsers; track user.id) {
+            <div class="user-item" (click)="toggleUser(user)">
+              <div class="user-avatar">
+                <img 
+                  [src]="getUserAvatar(user)"
+                  (error)="onImageError($event)"
+                  [alt]="getUserDisplayName(user)"
+                  class="avatar-img">
+                <div class="avatar-initials" style="display: none;">
+                  {{ getAvatarInitials(user) }}
+                </div>
+              </div>
+              <div class="user-info">
+                <span class="user-name">{{ getUserDisplayName(user) }}</span>
+                @if (user.username && user.username !== user.fullName) {
+                  <span class="user-username">@{{ user.username }}</span>
+                }
+              </div>
+              <button 
+                (click)="toggleUser(user); $event.stopPropagation()"
+                class="add-user-btn"
+                [class.selected]="isSelected(user.id)">
+                <i class="fas" [class.fa-check]="isSelected(user.id)" [class.fa-plus]="!isSelected(user.id)"></i>
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Selected Users -->
+    @if (selectedUsers.length > 0) {
+      <div class="selected-section">
+        <h4 class="selected-title">Đã chọn ({{ selectedUsers.length }})</h4>
+        <div class="selected-list">
+          @for (user of selectedUsers; track user.id) {
+            <div class="selected-item">
+              <div class="user-avatar small">
+                <img 
+                  [src]="getUserAvatar(user)"
+                  (error)="onImageError($event)"
+                  [alt]="getUserDisplayName(user)"
+                  class="avatar-img">
+                <div class="avatar-initials" style="display: none;">
+                  {{ getAvatarInitials(user) }}
+                </div>
+              </div>
+              <span class="user-name">{{ getUserDisplayName(user) }}</span>
+              <button (click)="toggleUser(user)" class="remove-btn" title="Bỏ chọn">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    @if (searchTerm && foundUsers.length === 0 && !isSearching) {
+      <div class="empty-state">
+        <i class="fas fa-user-slash"></i>
+        <p>Không tìm thấy người dùng</p>
+      </div>
+    }
+  </div>
+
+  <div class="modal-footer">
+    <button (click)="close()" class="btn-cancel">
+      Hủy
+    </button>
+    <button 
+      (click)="addMembers()" 
+      [disabled]="selectedUsers.length === 0 || isAdding"
+      class="btn-add">
+      @if (isAdding) {
+        <i class="fas fa-spinner fa-spin"></i>
+        <span>Đang thêm...</span>
+      } @else {
+        <i class="fas fa-plus"></i>
+        <span>Thêm ({{ selectedUsers.length }})</span>
+      }
+    </button>
+  </div>
+</div>
+

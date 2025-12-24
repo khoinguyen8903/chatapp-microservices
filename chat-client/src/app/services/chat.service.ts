@@ -31,6 +31,8 @@ export class ChatService {
   private messageStatusSubject = new Subject<any>();
   // UI helper: allow components to request sidebar preview updates without reloading rooms API
   private chatRoomPreviewSubject = new Subject<{ chatId: string; lastMessage: ChatMessage | null }>();
+  // [NEW] Group management events
+  private groupEventSubject = new Subject<any>();
 
   private activeChatId: string | null = null;
   private activeChatSubscription: any = null;
@@ -93,6 +95,12 @@ export class ChatService {
           if (payload.type === 'STATUS_UPDATE') {
               _this.messageStatusSubject.next(payload);
               return; 
+          }
+
+          // [NEW] Group management events
+          if (payload.type === 'MEMBERS_ADDED' || payload.type === 'MEMBER_REMOVED' || payload.type === 'ROOM_ADDED') {
+              _this.groupEventSubject.next(payload);
+              return;
           }
 
           // [NEW] Message updates (revoke/react/etc.) pushed to personal topic
@@ -372,5 +380,81 @@ export class ChatService {
 
   onChatRoomPreviewUpdate(): Observable<{ chatId: string; lastMessage: ChatMessage | null }> {
     return this.chatRoomPreviewSubject.asObservable();
+  }
+
+  // [NEW] Group management events
+  onGroupEvent(): Observable<any> {
+    return this.groupEventSubject.asObservable();
+  }
+
+  // =============================================
+  // GROUP ROLE MANAGEMENT APIs
+  // =============================================
+
+  /**
+   * Promote or demote a user to/from admin role
+   */
+  updateRole(roomId: string, targetUserId: string, action: 'PROMOTE' | 'DEMOTE'): Observable<any> {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    return this.http.put(`${this.apiUrl}/rooms/${roomId}/role`, {
+      targetUserId,
+      action
+    }, {
+      headers: {
+        'X-User-Id': currentUser.id
+      }
+    });
+  }
+
+  /**
+   * Kick a member from the group
+   */
+  kickMember(roomId: string, targetUserId: string): Observable<any> {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    return this.http.put(`${this.apiUrl}/rooms/${roomId}/kick`, {
+      targetUserId
+    }, {
+      headers: {
+        'X-User-Id': currentUser.id
+      }
+    });
+  }
+
+  /**
+   * Leave the group
+   */
+  leaveGroup(roomId: string): Observable<any> {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    return this.http.put(`${this.apiUrl}/rooms/${roomId}/leave`, {}, {
+      headers: {
+        'X-User-Id': currentUser.id
+      }
+    });
+  }
+
+  /**
+   * Delete the group (only owner can do this)
+   */
+  deleteGroup(roomId: string): Observable<any> {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    return this.http.delete(`${this.apiUrl}/rooms/${roomId}`, {
+      headers: {
+        'X-User-Id': currentUser.id
+      }
+    });
+  }
+
+  /**
+   * Add members to a group
+   */
+  addMembers(roomId: string, userIds: string[]): Observable<any> {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    return this.http.put(`${this.apiUrl}/rooms/${roomId}/add`, {
+      userIds
+    }, {
+      headers: {
+        'X-User-Id': currentUser.id
+      }
+    });
   }
 }

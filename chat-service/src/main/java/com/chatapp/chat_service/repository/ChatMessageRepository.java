@@ -10,6 +10,7 @@ import java.util.List;
 
 public interface ChatMessageRepository extends MongoRepository<ChatMessage, String> {
     List<ChatMessage> findByChatId(String chatId);
+    void deleteByChatId(String chatId);  // [NEW] Delete all messages in a chat room
     
     // [DEPRECATED] Old methods - keeping for backward compatibility
     long countByChatIdAndRecipientIdAndStatusNot(String chatId, String recipientId, MessageStatus status);

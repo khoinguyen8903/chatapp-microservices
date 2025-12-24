@@ -705,7 +705,32 @@ export class ChatFacade {
   }
 
   // [UPDATE] Logic chọn hội thoại (Hỗ trợ cả Group và Private)
-  selectSession(session: ChatSession) {
+  selectSession(session: ChatSession | null) {
+    // Handle null case: clear the session
+    if (session === null) {
+      this.selectedSession.set(null);
+      this.isRecipientTyping.set(false);
+      this.messages.set([]);
+      this.partnerStatus.set('OFFLINE');
+      this.lastSeen.set(null);
+      
+      // Clear active room in notification service
+      this.notificationService.setActiveRoom(null);
+      console.log('🔔 [Facade] Cleared active room');
+      
+      // Clear active chat in chat service
+      this.chatService.setActiveChat(null);
+      
+      // Unsubscribe from status updates
+      if (this.statusSubscription) {
+        this.statusSubscription.unsubscribe();
+        this.statusSubscription = null;
+      }
+      
+      return;
+    }
+
+    // Normal session selection logic
     this.selectedSession.set(session);
     this.isRecipientTyping.set(false);
 

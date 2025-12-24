@@ -125,36 +125,45 @@
     <!-- Message List -->
     <div class="message-list">
       @for (msg of facade.messages(); track trackByMessageId($index, msg)) {
-        <article 
-          class="message-wrapper"
-          [class.sent]="msg.senderId === facade.currentUser().id"
-          [class.received]="msg.senderId !== facade.currentUser().id"
-          (contextmenu)="onRightClick($event, msg)"
-          (click)="onMobileMessageClick($event, msg)"
-          (mouseenter)="onMouseEnter(msg)"
-          (mouseleave)="onMouseLeave(msg)">
-          
-          <div class="message-content-wrapper">
-            <!-- Group sender name -->
-            @if (facade.selectedSession()?.type === 'GROUP' && msg.senderId !== facade.currentUser().id) {
-              <span class="sender-name">
-                {{ msg.senderName || 'Member' }}
-              </span>
-            }
+        <!-- System Message (Special Display) -->
+        @if (msg.type === MessageType.SYSTEM) {
+          <div class="system-message-wrapper">
+            <div class="system-message">
+              <i class="fas fa-info-circle"></i>
+              <span class="system-message-text">{{ msg.content }}</span>
+            </div>
+          </div>
+        } @else {
+          <article 
+            class="message-wrapper"
+            [class.sent]="msg.senderId === facade.currentUser().id"
+            [class.received]="msg.senderId !== facade.currentUser().id"
+            (contextmenu)="onRightClick($event, msg)"
+            (click)="onMobileMessageClick($event, msg)"
+            (mouseenter)="onMouseEnter(msg)"
+            (mouseleave)="onMouseLeave(msg)">
+            
+            <div class="message-content-wrapper">
+              <!-- Group sender name -->
+              @if (facade.selectedSession()?.type === 'GROUP' && msg.senderId !== facade.currentUser().id) {
+                <span class="sender-name">
+                  {{ msg.senderName || 'Member' }}
+                </span>
+              }
 
-            <!-- Message Bubble with Glassmorphism -->
-            <div 
-              class="message-bubble"
-              [class.bubble-sent]="msg.senderId === facade.currentUser().id"
-              [class.bubble-received]="msg.senderId !== facade.currentUser().id"
-              [class.has-reactions]="msg.reactions && msg.reactions.length > 0"
-              [class.revoked]="msg.messageStatus === 'REVOKED'"
-              [class.show-status]="msg.showStatus"
-              (touchstart)="onTouchStart($event, msg)"
-              (touchend)="onTouchEnd($event, msg)"
-              (touchmove)="onTouchMove($event, msg)"
-              (touchcancel)="onTouchCancel(msg)"
-              (contextmenu)="$event.preventDefault()">
+              <!-- Message Bubble with Glassmorphism -->
+              <div 
+                class="message-bubble"
+                [class.bubble-sent]="msg.senderId === facade.currentUser().id"
+                [class.bubble-received]="msg.senderId !== facade.currentUser().id"
+                [class.has-reactions]="msg.reactions && msg.reactions.length > 0"
+                [class.revoked]="msg.messageStatus === 'REVOKED'"
+                [class.show-status]="msg.showStatus"
+                (touchstart)="onTouchStart($event, msg)"
+                (touchend)="onTouchEnd($event, msg)"
+                (touchmove)="onTouchMove($event, msg)"
+                (touchcancel)="onTouchCancel(msg)"
+                (contextmenu)="$event.preventDefault()">
 
               <!-- [NEW] Inline Action Buttons -->
               @if (shouldShowActions(msg)) {
@@ -224,7 +233,9 @@
                     
                     <!-- Show replied-to message content based on type -->
                     @if (msg.replyToMessage.type === MessageType.TEXT) {
-                      <span class="reply-quote-text">{{ msg.replyToMessage.content }}</span>
+                      <span class="reply-quote-text" [title]="msg.replyToMessage.content">
+                        {{ msg.replyToMessage.content }}
+                      </span>
                     } @else if (msg.replyToMessage.type === MessageType.IMAGE) {
                       <span class="reply-quote-text">
                         <i class="fas fa-image"></i> Photo
@@ -393,6 +404,7 @@
             </div>
           </div>
         </article>
+        } <!-- End of: if not system message -->
       }
 
       <!-- Typing Indicator -->
@@ -429,6 +441,8 @@
     }
 
     <div class="input-wrapper">
+      <!-- [NEW] Kicked User Warning (Above Input) -->
+
       @if (showEmojiPicker && !isRecording) {
         <div class="emoji-picker-popover">
           <emoji-mart
@@ -577,10 +591,11 @@
 <aside 
   class="right-sidebar"
   [class.is-open]="showRightSidebar"
-  [class.is-closed]="!showRightSidebar">
+  [class.is-closed]="!showRightSidebar"
+  (click)="$event.stopPropagation()">
   
   @if (facade.selectedSession(); as session) {
-    <!-- Close Button (Mobile) -->
+    <!-- Close/Back Button (Mobile & Desktop) -->
     <button class="sidebar-close-btn" (click)="closeRightSidebar()" aria-label="Close sidebar">
       <i class="fas fa-times"></i>
     </button>
@@ -647,6 +662,15 @@
 
         <!-- Action Buttons Row for Group Chat -->
         <div class="profile-actions">
+          @if (getMyRole() === 'OWNER' || getMyRole() === 'ADMIN') {
+            <button 
+              class="profile-action-btn"
+              (click)="openAddMemberModal()"
+              title="Thêm thành viên">
+              <i class="fas fa-user-plus"></i>
+              <span>Thêm</span>
+            </button>
+          }
           <button 
             class="profile-action-btn"
             [class.active]="showGroupMembers"
@@ -689,20 +713,72 @@
                     [src]="member.avatarUrl || 'assets/default-avatar.svg'" 
                     (error)="onAvatarError($event)"
                     class="member-avatar"
-                    [alt]="member.username">
-                  <span class="member-name">
-                    {{ member.username }}
-                    @if (isCurrentUser(member.id)) {
-                      <span class="you-badge">(Bạn)</span>
-                    }
-                  </span>
+                    [alt]="getMemberDisplayName(member)">
+                  <div class="member-info">
+                    <div class="member-name-row">
+                      <span class="member-name">
+                        {{ getMemberDisplayName(member) }}
+                        @if (isCurrentUser(member.id)) {
+                          <span class="you-badge">(Bạn)</span>
+                        }
+                      </span>
+                      <!-- Role Badges -->
+                      @if (getMemberRole(member.id) === 'OWNER') {
+                        <span class="role-badge owner-badge" title="Trưởng nhóm">
+                          👑 Trưởng nhóm
+                        </span>
+                      } @else if (getMemberRole(member.id) === 'ADMIN') {
+                        <span class="role-badge admin-badge" title="Phó nhóm">
+                          🛡️ Phó nhóm
+                        </span>
+                      }
+                    </div>
+                  </div>
+                  
+                  <!-- Action Menu (Three Dots) -->
                   @if (!isCurrentUser(member.id)) {
-                    <a 
-                      class="member-profile-link" 
-                      [routerLink]="['/profile', member.id]"
-                      title="Xem hồ sơ">
-                      <i class="fas fa-external-link-alt"></i>
-                    </a>
+                    <div class="member-actions">
+                      <button 
+                        class="member-action-btn"
+                        (click)="$event.stopPropagation()"
+                        [attr.aria-label]="'Actions for ' + getMemberDisplayName(member)">
+                        <i class="fas fa-ellipsis-v"></i>
+                      </button>
+                      <div class="member-action-menu">
+                        @if (canManageUser(member.id)) {
+                          <button 
+                            class="action-menu-item kick"
+                            (click)="kickMember(member.id)">
+                            <i class="fas fa-user-times"></i>
+                            <span>Mời khỏi nhóm</span>
+                          </button>
+                        }
+                        @if (canPromote(member.id)) {
+                          @if (!isAdmin(member.id)) {
+                            <button 
+                              class="action-menu-item promote"
+                              (click)="promoteToAdmin(member.id)">
+                              <i class="fas fa-arrow-up"></i>
+                              <span>Thăng chức Phó nhóm</span>
+                            </button>
+                          } @else {
+                            <button 
+                              class="action-menu-item demote"
+                              (click)="demoteFromAdmin(member.id)">
+                              <i class="fas fa-arrow-down"></i>
+                              <span>Bãi nhiệm Phó nhóm</span>
+                            </button>
+                          }
+                        }
+                        <a 
+                          class="action-menu-item"
+                          [routerLink]="['/profile', member.id]"
+                          (click)="$event.stopPropagation()">
+                          <i class="fas fa-user"></i>
+                          <span>Xem hồ sơ</span>
+                        </a>
+                      </div>
+                    </div>
                   }
                 </div>
               }
@@ -711,6 +787,29 @@
                 <span>Không có thông tin thành viên</span>
               </div>
             }
+
+            <!-- Danger Zone -->
+            <div class="danger-zone">
+              <h5 class="danger-zone-title">Khu vực nguy hiểm</h5>
+              
+              @if (getMyRole() !== 'OWNER') {
+                <button 
+                  class="danger-btn leave-btn"
+                  (click)="leaveGroup()">
+                  <i class="fas fa-sign-out-alt"></i>
+                  <span>Rời nhóm</span>
+                </button>
+              }
+              
+              @if (getMyRole() === 'OWNER') {
+                <button 
+                  class="danger-btn delete-btn"
+                  (click)="deleteGroup()">
+                  <i class="fas fa-trash-alt"></i>
+                  <span>Giải tán nhóm</span>
+                </button>
+              }
+            </div>
           </div>
         }
       </div>

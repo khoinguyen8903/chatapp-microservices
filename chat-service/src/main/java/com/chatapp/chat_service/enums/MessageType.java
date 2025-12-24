@@ -6,5 +6,6 @@ public enum MessageType {
     IMAGE,
     VIDEO,
     FILE,
-    AUDIO
+    AUDIO,
+    SYSTEM  // [NEW] System messages for group events (member added, removed, etc.)
 }

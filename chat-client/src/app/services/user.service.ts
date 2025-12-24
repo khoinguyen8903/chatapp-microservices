@@ -43,5 +43,10 @@ export class UserService {
   getUserProfile(userId: string): Observable<UserProfile> {
     return this.http.get<UserProfile>(`${this.apiUrl}/${userId}/profile`);
   }
+
+  // Search users by keyword (name, username, or email)
+  searchUsers(keyword: string): Observable<UserProfile[]> {
+    return this.http.get<UserProfile[]>(`${this.apiUrl}/search?keyword=${encodeURIComponent(keyword)}`);
+  }
 }
 
