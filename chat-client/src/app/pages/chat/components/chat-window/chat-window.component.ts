@@ -13,11 +13,13 @@ import { NotificationService } from '../../../../services/notification.service';
 import { ChatService } from '../../../../services/chat.service';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../../environments/environment';
+import { AddMemberModalComponent } from '../add-member-modal/add-member-modal.component';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-chat-window',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, PickerModule, LastSeenPipe, SafeUrlPipe, FileNamePipe],
+  imports: [CommonModule, FormsModule, RouterModule, PickerModule, LastSeenPipe, SafeUrlPipe, FileNamePipe, AddMemberModalComponent],
   templateUrl: './chat-window.component.html',
   styleUrls: ['./chat-window.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush  // ✅ OnPush for better performance
@@ -51,6 +53,10 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   showGroupMembers = false;
   groupMembers: Array<{ id: string; username: string; fullName?: string; avatarUrl?: string }> = [];
   isLoadingMembers = false;
+  showAddMemberModal = false;
+
+  // --- KICKED STATE ---
+  isKicked = false;
 
   // --- MUTE STATE ---
   isMuted = false;
@@ -153,6 +159,7 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   private androidDocFocusOutHandler?: (e: FocusEvent) => void;
 
   private isResettingWindowScroll = false;
+  private groupEventSubscription?: Subscription;
 
   // ✅ TrackBy function for *ngFor optimization
   trackByMessageId(index: number, message: ChatMessage): string | number {
@@ -180,6 +187,10 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
         // Nếu không chọn phòng nào -> Reset về null
         this.notificationService.setActiveRoom(null);
       }
+      
+      // Reset isKicked when selecting a new session
+      this.isKicked = false;
+      this.cdr.markForCheck();
     });
   }
 
@@ -201,6 +212,12 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     // Android Chrome specific: Listen for focus/blur events on inputs
     this.setupAndroidKeyboardHandling();
 
+    // Subscribe to group events (member added/removed)
+    this.groupEventSubscription = this.chatService.onGroupEvent().subscribe((event: any) => {
+      if (event.type === 'MEMBER_REMOVED') {
+        this.handleMemberRemoved(event);
+      }
+    });
   }
 
   // ✅ Mobile: Handle viewport height changes for virtual keyboard
@@ -352,6 +369,11 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     this.notificationService.setActiveRoom(null);
     this.cancelRecording();
 
+    // Unsubscribe from group events
+    if (this.groupEventSubscription) {
+      this.groupEventSubscription.unsubscribe();
+    }
+
     // Cleanup event listeners
     window.removeEventListener('resize', this.handleViewportChange);
     window.removeEventListener('orientationchange', this.handleViewportChange);
@@ -377,6 +399,9 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   // --- Các hàm cũ giữ nguyên bên dưới ---
 
   sendMessage() {
+    // Block sending if user has been kicked
+    if (this.isKicked) return;
+    
     if (!this.newMessage.trim()) return;
     
     // If replying, send with replyToId
@@ -395,6 +420,8 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   async startRecording() {
     if (this.isRecording) return;
     if (!this.facade.selectedSession()) return;
+    // Block recording if user has been kicked
+    if (this.isKicked) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -525,6 +552,12 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   }
 
   async onSendRecording() {
+    // Block sending if user has been kicked
+    if (this.isKicked) {
+      this.cancelRecording();
+      return;
+    }
+    
     if (!this.isRecording) return;
     if (!this.facade.selectedSession()) return;
 
@@ -1111,6 +1144,9 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   }
 
   onFileSelected(event: any) {
+    // Block file upload if user has been kicked
+    if (this.isKicked) return;
+    
     const file = event.target.files[0];
     if (file) {
       event.target.value = '';
@@ -1343,22 +1379,32 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     this.isLoadingMembers = true;
 
     // Get group details including member info
-    this.http.get<any>(`${environment.apiUrl}/rooms/group/${session.id}/members`)
-      .subscribe({
-        next: (data) => {
-          // Data should be an array of user objects with id, username, avatarUrl
-          this.groupMembers = data || [];
-          this.isLoadingMembers = false;
-          this.cdr.markForCheck();
-        },
-        error: (err) => {
-          console.error('Error loading group members:', err);
-          // Fallback: Try to display members from session if available
+    this.http.get<Array<{ id: string; username: string; fullName?: string; avatarUrl?: string }>>(
+      `${environment.apiUrl}/rooms/group/${session.id}/members`
+    ).subscribe({
+      next: (data) => {
+        // Ensure data is properly mapped - backend returns array of user objects
+        if (Array.isArray(data)) {
+          this.groupMembers = data.map(member => ({
+            id: member.id || '',
+            username: member.username || 'Unknown',
+            fullName: member.fullName || undefined,
+            avatarUrl: member.avatarUrl || undefined
+          }));
+        } else {
           this.groupMembers = [];
-          this.isLoadingMembers = false;
-          this.cdr.markForCheck();
         }
-      });
+        console.log('✅ Loaded group members:', this.groupMembers.length);
+        this.isLoadingMembers = false;
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('❌ Error loading group members:', err);
+        this.groupMembers = [];
+        this.isLoadingMembers = false;
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   /**
@@ -1564,6 +1610,45 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Handle member removed event (from group events)
+   */
+  private handleMemberRemoved(event: any) {
+    const currentSession = this.facade.selectedSession();
+    const currentUserId = this.facade.currentUser()?.id;
+    
+    if (!currentSession || currentSession.id !== event.roomId) {
+      return; // Not for the current chat
+    }
+
+    // Check if the kicked user is the current user
+    if (event.kickedUserId === currentUserId) {
+      // Current user was kicked - set isKicked flag and add system message
+      this.isKicked = true;
+      
+      // Add system message to messages if provided
+      if (event.systemMessage) {
+        const systemMsg: ChatMessage = {
+          id: event.systemMessage.id,
+          chatId: event.systemMessage.chatId,
+          senderId: event.systemMessage.senderId || 'SYSTEM',
+          recipientId: event.systemMessage.recipientId,
+          content: event.systemMessage.content,
+          type: MessageType.SYSTEM,
+          status: MessageStatus.SEEN,
+          timestamp: event.systemMessage.timestamp ? new Date(event.systemMessage.timestamp) : new Date()
+        };
+        
+        this.facade.messages.update((msgs) => [...msgs, systemMsg]);
+      }
+    } else {
+      // Someone else was kicked - just reload members list
+      this.loadGroupMembers();
+    }
+    
+    this.cdr.markForCheck();
+  }
+
+  /**
    * Kick a member from the group
    */
   kickMember(memberId: string) {
@@ -1620,35 +1705,37 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   // =============================================
 
   /**
-   * Add members to group (simplified - using prompt)
+   * Open add member modal
    */
   openAddMemberModal() {
     const session = this.facade.selectedSession();
     if (!session || session.type !== 'GROUP') return;
+    this.showAddMemberModal = true;
+  }
 
-    // Simple prompt for now - user enters comma-separated user IDs
-    const input = window.prompt('Nhập ID người dùng (phân cách bằng dấu phẩy):');
-    if (!input || !input.trim()) return;
+  /**
+   * Close add member modal
+   */
+  closeAddMemberModal() {
+    this.showAddMemberModal = false;
+  }
 
-    const userIds = input.split(',').map(id => id.trim()).filter(id => id.length > 0);
-    if (userIds.length === 0) {
-      alert('Vui lòng nhập ít nhất một ID người dùng');
-      return;
-    }
+  /**
+   * Handle members added event
+   */
+  onMembersAdded(userIds: string[]) {
+    console.log('✅ Members added:', userIds);
+    this.loadGroupMembers(); // Reload members list
+    this.facade.loadRooms(); // Reload rooms to update member count
+    this.closeAddMemberModal();
+    this.cdr.markForCheck();
+  }
 
-    const roomId = session.id;
-    this.chatService.addMembers(roomId, userIds).subscribe({
-      next: () => {
-        console.log('✅ Added members to group');
-        this.loadGroupMembers(); // Reload members list
-        this.facade.loadRooms(); // Reload rooms to update member count
-        this.cdr.markForCheck();
-      },
-      error: (err) => {
-        console.error('❌ Error adding members:', err);
-        alert(err.error?.error || 'Không thể thêm thành viên');
-      }
-    });
+  /**
+   * Get existing member IDs for add member modal
+   */
+  getExistingMemberIds(): string[] {
+    return this.groupMembers.map(m => m.id);
   }
 
   /**

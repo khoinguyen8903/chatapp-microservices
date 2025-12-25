@@ -459,20 +459,11 @@ public class ChatRoomService {
         }
         
         // [NEW] Create system message BEFORE removing user (so they can see it)
+        // Personal message for the kicked user: "Bạn đã bị mời ra khỏi nhóm"
         ChatMessage systemMessage = null;
         try {
-            String kickedUserName = "User";
-            try {
-                UserDTO kickedUser = userClient.getUserById(targetUserId);
-                if (kickedUser != null && kickedUser.getUsername() != null) {
-                    kickedUserName = kickedUser.getUsername();
-                }
-            } catch (Exception e) {
-                System.err.println("⚠️ [ChatRoomService] Could not fetch kicked user name: " + e.getMessage());
-            }
-            
-            // Always show who was kicked (not who did the kicking)
-            String systemMessageContent = kickedUserName + " đã bị mời ra khỏi nhóm";
+            // Create personalized message for the kicked user
+            String systemMessageContent = "Bạn đã bị mời ra khỏi nhóm";
             
             systemMessage = ChatMessage.builder()
                     .chatId(roomId)
@@ -485,7 +476,7 @@ public class ChatRoomService {
                     .build();
             
             systemMessage = chatMessageRepository.save(systemMessage);
-            System.out.println("📢 [ChatRoomService] Created system message for kick: " + systemMessageContent);
+            System.out.println("📢 [ChatRoomService] Created system message for kicked user: " + systemMessageContent);
         } catch (Exception e) {
             System.err.println("⚠️ [ChatRoomService] Failed to create system message: " + e.getMessage());
             // Continue with kick even if system message fails

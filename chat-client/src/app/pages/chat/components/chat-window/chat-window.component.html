@@ -422,9 +422,10 @@
   </section>
 
   <!-- INPUT: Fixed height, never shrinks -->
-  <footer class="chat-input-area">
-    <!-- [NEW] Reply Banner -->
-    @if (replyingToMsg) {
+  @if (!isKicked) {
+    <footer class="chat-input-area">
+      <!-- [NEW] Reply Banner -->
+      @if (replyingToMsg) {
       <div class="reply-banner">
         <div class="reply-banner-content">
           <div class="reply-label">Đang trả lời:</div>
@@ -542,7 +543,16 @@
         </div>
       }
     </div>
-  </footer>
+    </footer>
+  } @else {
+    <!-- Kicked User Alert -->
+    <footer class="chat-input-area">
+      <div class="kicked-alert">
+        <i class="fas fa-ban"></i>
+        <span class="kicked-alert-text">Bạn đã bị mời ra khỏi nhóm</span>
+      </div>
+    </footer>
+  }
 
   <!-- [NEW] Context Menu Overlay -->
   @if (contextMenuVisible && contextMenuMsg) {
@@ -971,4 +981,14 @@
       }
     </div>
   </div>
+}
+
+<!-- Add Member Modal -->
+@if (showAddMemberModal && facade.selectedSession()?.type === 'GROUP') {
+  <app-add-member-modal
+    [roomId]="facade.selectedSession()!.id"
+    [existingMemberIds]="getExistingMemberIds()"
+    (onClose)="closeAddMemberModal()"
+    (onMembersAdded)="onMembersAdded($event)">
+  </app-add-member-modal>
 }

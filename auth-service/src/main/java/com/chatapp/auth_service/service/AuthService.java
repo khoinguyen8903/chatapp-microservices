@@ -99,6 +99,14 @@ public class AuthService {
         return userRepository.findById(userId).orElse(null);
     }
 
+    // Search users by username or email (for add member feature)
+    public java.util.List<User> searchUsers(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return userRepository.searchUsers(query.trim());
+    }
+
     // Email verification
     @Transactional
     public boolean verifyEmail(String token) {

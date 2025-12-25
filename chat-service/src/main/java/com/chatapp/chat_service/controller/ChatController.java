@@ -704,6 +704,11 @@ public class ChatController {
                 kickEvent.put("systemMessage", systemMessage);
             }
             
+            // [IMPORTANT] Broadcast system message to chat topic so it appears in chat window
+            if (systemMessage != null) {
+                messagingTemplate.convertAndSend("/topic/chat/" + roomId, systemMessage);
+            }
+            
             // Broadcast to room topic
             messagingTemplate.convertAndSend("/topic/chat-room/" + roomId + "/updated", kickEvent);
             

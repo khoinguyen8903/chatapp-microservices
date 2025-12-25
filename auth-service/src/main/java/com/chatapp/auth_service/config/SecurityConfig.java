@@ -32,7 +32,16 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/verify", "/api/auth/resend-verification").permitAll()
                         // Public endpoint for other services to query user by ID
                         .requestMatchers("/api/auth/users/**", "/api/auth/check/**").permitAll()
-                        // Protected endpoints: user profile (requires authentication)
+                        // Protected endpoint: current user profile (requires authentication)
+                        .requestMatchers("/api/users/profile").authenticated()
+                        // Protected endpoint: search users (requires authentication - only logged-in users can search)
+                        .requestMatchers("GET", "/api/users/search").authenticated()
+                        // Public endpoint for service-to-service calls: GET /api/users/{userId} (UUID pattern only)
+                        // This allows chat-service to query user info by ID without authentication
+                        .requestMatchers(request -> request.getMethod().equals("GET") 
+                                && request.getRequestURI().matches("/api/users/[a-fA-F0-9\\-]{36}$")).permitAll()
+                        // Protected endpoints: all other /api/users/** operations (requires authentication)
+                        // This includes /api/users/{userId}/profile and other endpoints
                         .requestMatchers("/api/users/**").authenticated()
                         // Protected endpoint: current user info
                         .requestMatchers("/api/auth/me").authenticated()

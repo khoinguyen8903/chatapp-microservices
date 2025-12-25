@@ -2,6 +2,7 @@ package com.chatapp.auth_service.controller;
 
 import com.chatapp.auth_service.dto.UpdateProfileRequest;
 import com.chatapp.auth_service.dto.UserProfileResponse;
+import com.chatapp.auth_service.dto.UserResponse;
 import com.chatapp.auth_service.entity.User;
 import com.chatapp.auth_service.service.AuthService;
 import jakarta.validation.Valid;
@@ -87,6 +88,39 @@ public class UserController {
     }
 
     /**
+     * GET /api/users/{userId}
+     * Public endpoint for service-to-service calls (used by chat-service via Feign client)
+     * Returns basic user info (id, username, fullName, avatarUrl) compatible with UserDTO
+     * NOTE: This must be declared BEFORE /{userId}/profile to avoid path mapping conflicts
+     */
+    @GetMapping(value = "/{userId}", headers = "Accept=application/json")
+    public ResponseEntity<UserResponse> getUserById(@PathVariable String userId) {
+        try {
+            System.out.println("🔍 [UserController] GET /api/users/" + userId + " - Service-to-service call");
+            User user = authService.findUserById(userId);
+            if (user == null) {
+                System.out.println("❌ [UserController] User not found: " + userId);
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Create UserResponse using constructor (safer than builder with @AllArgsConstructor)
+            UserResponse response = new UserResponse(
+                    user.getId(),
+                    user.getUsername(),
+                    user.getFullName(),
+                    user.getAvatarUrl()
+            );
+            
+            System.out.println("✅ [UserController] Returning user: " + user.getUsername());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("❌ [UserController] Error in getUserById for userId: " + userId);
+            e.printStackTrace();
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    /**
      * GET /api/users/{userId}/profile
      */
     @GetMapping("/{userId}/profile")
@@ -96,5 +130,35 @@ public class UserController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(authService.mapToProfileResponse(user));
+    }
+
+    /**
+     * GET /api/users/search?keyword=...
+     * Search users by username or email (for add member feature)
+     * Returns list of UserResponse objects (id, username, fullName, avatarUrl)
+     */
+    @GetMapping("/search")
+    public ResponseEntity<java.util.List<UserResponse>> searchUsers(@RequestParam("keyword") String keyword) {
+        try {
+            if (keyword == null || keyword.trim().isEmpty()) {
+                return ResponseEntity.ok(new java.util.ArrayList<>());
+            }
+
+            java.util.List<User> users = authService.searchUsers(keyword);
+            java.util.List<UserResponse> responses = users.stream()
+                    .map(user -> new UserResponse(
+                            user.getId(),
+                            user.getUsername(),
+                            user.getFullName(),
+                            user.getAvatarUrl()
+                    ))
+                    .collect(java.util.stream.Collectors.toList());
+
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            System.err.println("❌ [UserController] Error searching users: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).build();
+        }
     }
 }
