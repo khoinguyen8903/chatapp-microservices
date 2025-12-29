@@ -912,6 +912,7 @@
   border-top: 1px solid rgba(99, 102, 241, 0.08);
   /* Handle iPhone X+ Home Indicator */
   padding-bottom: env(safe-area-inset-bottom, 0);
+  overflow: visible; // Allow emoji picker to overflow
 
   // Mobile specific adjustments
   @media (max-width: 767px) {
@@ -931,6 +932,7 @@
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative; // anchor emoji picker
+    overflow: visible; // Allow emoji picker to overflow on desktop
 
     &:focus-within {
       border-color: #6366f1;
@@ -1115,15 +1117,7 @@
       color: #ef4444;
       letter-spacing: 0.02em;
     }
-    .emoji-picker-popover {
-      position: absolute;
-      left: 0;
-      bottom: calc(100% + 10px);
-      z-index: 100;
-      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.18);
-      border-radius: 14px;
-      overflow: hidden;
-    }
+    // Old emoji picker popover - removed, now using bottom sheet
 
     .message-input {
       flex: 1;
@@ -3156,4 +3150,225 @@ a.profile-action-btn {
 .header-actions .action-button.active {
   background: rgba(99, 102, 241, 0.15);
   color: #6366f1;
+}
+
+// =============================================
+// EMOJI PICKER BOTTOM SHEET (Messenger Style)
+// =============================================
+
+// Backdrop overlay
+.emoji-picker-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 9998;
+  animation: fadeIn 0.2s ease-out;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+// Bottom sheet container
+.emoji-picker-bottom-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #ffffff;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  max-height: 60vh; // Maximum height on mobile
+  display: flex;
+  flex-direction: column;
+  animation: slideUpBottomSheet 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  // Ensure it's above browser chrome
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  
+  @keyframes slideUpBottomSheet {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  // Header with title and close button
+  .emoji-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    flex-shrink: 0;
+    background: #ffffff;
+    border-radius: 20px 20px 0 0;
+
+    .emoji-picker-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1f2937;
+      letter-spacing: -0.01em;
+    }
+
+    .emoji-picker-close {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.05);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #4b5563;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.1);
+        color: #1f2937;
+        transform: scale(1.05);
+      }
+
+      &:active {
+        transform: scale(0.95);
+      }
+
+      i {
+        font-size: 1rem;
+      }
+    }
+  }
+
+  // Content area with emoji picker
+  .emoji-picker-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px;
+    min-height: 0; // Allow flex child to shrink
+
+    // Custom scrollbar
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 102, 241, 0.2) transparent;
+
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.2);
+      border-radius: 3px;
+
+      &:hover {
+        background: rgba(99, 102, 241, 0.3);
+      }
+    }
+
+    // Style the emoji-mart component
+    ::ng-deep emoji-mart {
+      width: 100% !important;
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
+    }
+
+    ::ng-deep .emoji-mart {
+      width: 100% !important;
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
+    }
+
+    ::ng-deep .emoji-mart-bar {
+      border-top: 1px solid rgba(0, 0, 0, 0.08);
+      background: #fafbfc;
+    }
+
+    ::ng-deep .emoji-mart-scroll {
+      max-height: calc(60vh - 120px); // Account for header
+    }
+  }
+}
+
+// Desktop: Smaller, positioned above input on the left
+@media (min-width: 768px) {
+  .emoji-picker-backdrop {
+    display: none; // No backdrop on desktop
+  }
+
+  .emoji-picker-bottom-sheet {
+    position: fixed;
+    left: 20px; // Position on the left side
+    right: auto;
+    bottom: 80px; // Position above input area
+    width: 400px;
+    max-width: calc(100vw - 40px);
+    max-height: 400px;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    animation: slideUpDesktop 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    padding-bottom: 0;
+
+    @keyframes slideUpDesktop {
+      from {
+        transform: translateY(20px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .emoji-picker-header {
+      border-radius: 16px 16px 0 0;
+      padding: 12px 16px;
+
+      .emoji-picker-title {
+        font-size: 1rem;
+      }
+
+      .emoji-picker-close {
+        width: 32px;
+        height: 32px;
+
+        i {
+          font-size: 0.875rem;
+        }
+      }
+    }
+
+    .emoji-picker-content {
+      padding: 4px;
+
+      ::ng-deep .emoji-mart-scroll {
+        max-height: 320px;
+      }
+    }
+  }
+}
+
+// Mobile: Full-width bottom sheet
+@media (max-width: 767px) {
+  .emoji-picker-bottom-sheet {
+    max-height: 70vh; // Larger on mobile for better UX
+    border-radius: 24px 24px 0 0; // More rounded on mobile
+  }
+
+  .emoji-picker-content {
+    ::ng-deep .emoji-mart-scroll {
+      max-height: calc(70vh - 120px);
+    }
+  }
 }

@@ -620,7 +620,12 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     const emoji = event?.emoji?.native;
     if (!emoji) return;
     this.newMessage = `${this.newMessage}${emoji}`;
-    // keep focus behavior simple; user can keep typing
+    
+    // On mobile, close the picker after selecting an emoji (Messenger behavior)
+    // On desktop, keep it open for multiple selections
+    if (this.isMobileViewport()) {
+      this.showEmojiPicker = false;
+    }
   }
 
   // --- Reactions ---
