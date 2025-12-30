@@ -34,7 +34,7 @@ public class ChatMessage {
     private String recipientId;
     private String content;
     private String fileName; // Original filename for file attachments
-
+    private String senderName; // [NEW] Store sender's username for display
     private Date timestamp;
 
     @Builder.Default
@@ -58,4 +58,9 @@ public class ChatMessage {
     // --- [NEW] Message revoke status ---
     // Can be: "SENT", "REVOKED" (null means SENT for backwards compatibility)
     private String messageStatus; // Using String instead of enum to avoid conflict with existing 'status' field
+
+    // --- [NEW] Read receipts for group chats ---
+    // Track which users have seen this message (for group chat read receipts display)
+    @Builder.Default
+    private List<String> readBy = new ArrayList<>(); // User IDs who have seen this message
 }

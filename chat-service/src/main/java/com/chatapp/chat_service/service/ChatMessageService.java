@@ -1,6 +1,7 @@
 package com.chatapp.chat_service.service;
 
 import com.chatapp.chat_service.client.NotificationClient;
+import com.chatapp.chat_service.client.UserClient;
 import com.chatapp.chat_service.dto.NotificationRequest;
 import com.chatapp.chat_service.enums.MessageStatus;
 import com.chatapp.chat_service.enums.MessageType;
@@ -24,6 +25,8 @@ public class ChatMessageService {
     @Autowired private ChatMessageRepository repository;
     @Autowired private ChatRoomService chatRoomService;
     @Autowired private NotificationClient notificationClient;
+    @Autowired
+    private UserClient userClient;
 
     public ChatMessage save(ChatMessage chatMessage, String senderName) {
         // [CRITICAL] Never persist client-side temporary IDs like "temp_..."
@@ -179,14 +182,16 @@ public class ChatMessageService {
     public List<ChatMessage> findChatMessages(String senderId, String recipientId) {
         var groupRoom = chatRoomService.findByChatId(recipientId);
         List<ChatMessage> messages;
-        
+
         if (groupRoom.isPresent() && groupRoom.get().isGroup()) {
             messages = repository.findByChatId(recipientId);
+            // [NEW] Enrich group messages with sender names
+            enrichMessagesWithSenderNames(messages);
         } else {
             var chatId = chatRoomService.getChatRoomId(senderId, recipientId, false);
             messages = chatId.map(repository::findByChatId).orElse(new ArrayList<>());
         }
-        
+
         // [FIX] Ensure all messages have a valid status (fix old messages with null status)
         boolean hasNullStatus = messages.stream().anyMatch(msg -> msg.getStatus() == null);
         if (hasNullStatus) {
@@ -204,13 +209,36 @@ public class ChatMessageService {
             System.out.println("✅ [ChatMessageService] Fixed all messages with null status");
             messages = fixedMessages;
         }
-        
+
         // [NEW] Filter out messages deleted by the current user (senderId is the requester here)
         messages = messages.stream()
                 .filter(msg -> msg.getDeletedForUsers() == null || !msg.getDeletedForUsers().contains(senderId))
                 .collect(Collectors.toList());
-        
+
         return messages;
+    }
+
+    /**
+     * [NEW] Enrich messages with sender names by fetching from UserClient
+     * This ensures all messages have correct senderName, not just those sent via WebSocket
+     */
+    private void enrichMessagesWithSenderNames(List<ChatMessage> messages) {
+        for (ChatMessage msg : messages) {
+            if (msg.getSenderId() != null && msg.getSenderName() == null) {
+                try {
+                    var userDTO = userClient.getUserById(msg.getSenderId());
+                    if (userDTO != null && userDTO.getUsername() != null) {
+                        msg.setSenderName(userDTO.getUsername());
+                    } else {
+                        // Fallback if user service unavailable
+                        msg.setSenderName("Member");
+                    }
+                } catch (Exception e) {
+                    System.err.println("⚠️ [ChatMessageService] Failed to fetch sender name for " + msg.getSenderId() + ": " + e.getMessage());
+                    msg.setSenderName("Member");
+                }
+            }
+        }
     }
 
     public ChatMessage findById(String id) {
@@ -489,6 +517,44 @@ public class ChatMessageService {
         }
         
         return messagesToUpdate;
+    }
+
+    /**
+     * [NEW] Update read receipts for group chat messages
+     * When a user views a message, add their userId to the readBy list
+     * This enables showing avatars of who has seen each message (like Messenger)
+     */
+    public ChatMessage markMessageAsSeenByUser(String messageId, String userId) {
+        Optional<ChatMessage> messageOpt = repository.findById(messageId);
+
+        if (messageOpt.isEmpty()) {
+            System.out.println("⚠️ [ChatMessageService] Message not found: " + messageId);
+            return null;
+        }
+
+        ChatMessage message = messageOpt.get();
+
+        // Initialize readBy list if null
+        if (message.getReadBy() == null) {
+            message.setReadBy(new ArrayList<>());
+        }
+
+        // Add user to readBy if not already there
+        if (!message.getReadBy().contains(userId)) {
+            message.getReadBy().add(userId);
+            System.out.println("✅ [ChatMessageService] User " + userId + " marked message " + messageId + " as seen");
+
+            // Also update status to SEEN
+            if (message.getStatus() == null || message.getStatus() == MessageStatus.SENT || message.getStatus() == MessageStatus.DELIVERED) {
+                message.setStatus(MessageStatus.SEEN);
+            }
+
+            ChatMessage saved = repository.save(message);
+            return saved;
+        }
+
+        System.out.println("ℹ️ [ChatMessageService] User " + userId + " already marked message " + messageId + " as seen");
+        return message;
     }
 
     // =============================================

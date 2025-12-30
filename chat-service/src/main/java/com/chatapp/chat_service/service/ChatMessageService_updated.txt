@@ -1,0 +1,52 @@
+// Updated updateStatuses method section - to be used as reference
+
+        if (isGroup) {
+            // For GROUP: Track read receipts per user (like Messenger)
+            if (status == MessageStatus.SEEN) {
+                messagesToUpdate = messages.stream()
+                        .filter(msg -> !msg.getSenderId().equals(senderId)) // Only messages from others
+                        .filter(msg -> msg.getReadBy() == null || !msg.getReadBy().contains(senderId)) // Only if not already tracked
+                        .peek(msg -> {
+                            System.out.println("  👀 Adding user " + senderId + " to readBy for message ID: " + msg.getId());
+                            if (msg.getReadBy() == null) {
+                                msg.setReadBy(new ArrayList<>());
+                            }
+                            msg.getReadBy().add(senderId);
+                            msg.setStatus(status);
+                        })
+                        .collect(Collectors.toList());
+                System.out.println("👥 [ChatMessageService] GROUP: Tracking " + senderId + " as viewer for " + messagesToUpdate.size() + " messages");
+            } else {
+                // For DELIVERED in group, just update status
+                messagesToUpdate = messages.stream()
+                        .filter(msg -> !msg.getSenderId().equals(senderId))
+                        .filter(msg -> canTransitionTo(msg.getStatus(), status))
+                        .peek(msg -> {
+                            System.out.println("  🔄 Updating message ID: " + msg.getId() + " from " + msg.getStatus() + " to " + status);
+                            msg.setStatus(status);
+                        })
+                        .collect(Collectors.toList());
+                System.out.println("👥 [ChatMessageService] GROUP: Marking messages NOT from " + senderId + " as " + status);
+            }
+        } else {
+            // For 1-1: Mark messages sent by other person (senderId in payload) with new status
+            messagesToUpdate = messages.stream()
+                    .filter(msg -> msg.getSenderId().equals(senderId))
+                    .filter(msg -> canTransitionTo(msg.getStatus(), status)) // [CRITICAL FIX] Prevent backward transitions
+                    .peek(msg -> {
+                        System.out.println("  🔄 Updating message ID: " + msg.getId() + " from " + msg.getStatus() + " to " + status);
+                        msg.setStatus(status);
+                        // Also track read receipt for 1-1 chat
+                        if (status == MessageStatus.SEEN) {
+                            if (msg.getReadBy() == null) {
+                                msg.setReadBy(new ArrayList<>());
+                            }
+                            if (!msg.getReadBy().contains(senderId)) {
+                                msg.getReadBy().add(senderId);
+                            }
+                        }
+                    })
+                    .collect(Collectors.toList());
+            System.out.println("💬 [ChatMessageService] 1-1: Marking messages FROM " + senderId);
+        }
+

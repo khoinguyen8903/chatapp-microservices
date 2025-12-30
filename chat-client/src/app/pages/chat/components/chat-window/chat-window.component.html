@@ -388,9 +388,21 @@
             <!-- Message Metadata (Timestamp + Status) - Shows on hover (desktop) or tap (mobile) -->
             <div class="message-meta" [class.show-status]="msg.showStatus">
               <span class="message-time">{{ msg.timestamp | date:'HH:mm' }}</span>
-              
+
               @if (msg.senderId === facade.currentUser().id) {
-                @if (msg.status === MessageStatus.SEEN) {
+                @if (shouldShowReadReceipts(msg)) {
+                  <!-- [NEW] Show avatars of who read the message (like Messenger) -->
+                  <div class="read-receipts">
+                    @for (reader of getMessageReaders(msg); track reader.id) {
+                      <img
+                        [src]="reader.avatarUrl || 'assets/default-avatar.svg' | safeUrl"
+                        [alt]="reader.fullName || reader.username"
+                        class="read-receipt-avatar"
+                        (error)="onAvatarError($event)"
+                        [title]="reader.fullName || reader.username">
+                    }
+                  </div>
+                } @else if (msg.status === MessageStatus.SEEN) {
                   <i class="fas fa-check-double status-icon seen" title="Seen"></i>
                   <span class="status-label">Đã xem</span>
                 } @else if (msg.status === MessageStatus.DELIVERED) {

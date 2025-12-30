@@ -457,4 +457,20 @@ export class ChatService {
       }
     });
   }
+
+  /**
+   * [NEW] Get read receipts for a message
+   * Returns list of user IDs who have read this message (for showing avatars like Messenger)
+   */
+  getMessageReadReceipts(messageId: string): Observable<{ messageId: string; readBy: string[]; readCount: number }> {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    return this.http.get<{ messageId: string; readBy: string[]; readCount: number }>(
+      `${this.apiUrl}/messages/${messageId}/read-receipts`,
+      {
+        headers: {
+          'X-User-Id': currentUser.id
+        }
+      }
+    );
+  }
 }

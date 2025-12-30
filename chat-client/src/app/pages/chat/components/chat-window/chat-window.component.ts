@@ -1949,14 +1949,14 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
       // Fallback: Find by iterating through messages
       const messages = this.facade.messages();
       const index = messages.findIndex(m => m.id === messageId);
-      
+
       if (index !== -1 && messageElements[index]) {
         targetElement = messageElements[index] as HTMLElement;
       }
 
       if (targetElement) {
         targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
+
         // Highlight the message
         targetElement.classList.add('highlight-flash');
         setTimeout(() => {
@@ -1964,5 +1964,58 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
         }, 2000);
       }
     }, 300);
+  }
+
+  // =============================================
+  // READ RECEIPTS (LIKE MESSENGER)
+  // =============================================
+
+  /**
+   * Get member details by ID from groupMembers list
+   * Used for showing read receipt avatars
+   */
+  getMemberById(memberId: string): { id: string; username: string; fullName?: string; avatarUrl?: string } | undefined {
+    return this.groupMembers.find(m => m.id === memberId);
+  }
+
+  /**
+   * Get members who have read a message
+   * Returns array of member objects with avatar info
+   */
+  getMessageReaders(msg: ChatMessage): Array<{ id: string; username: string; fullName?: string; avatarUrl?: string }> {
+    if (!msg.readBy || msg.readBy.length === 0) {
+      return [];
+    }
+
+    const readers: Array<{ id: string; username: string; fullName?: string; avatarUrl?: string }> = [];
+
+    for (const userId of msg.readBy) {
+      const member = this.getMemberById(userId);
+      if (member) {
+        readers.push(member);
+      } else {
+        // Fallback for members not in loaded group list
+        readers.push({
+          id: userId,
+          username: 'Unknown',
+          fullName: undefined,
+          avatarUrl: undefined
+        });
+      }
+    }
+
+    return readers;
+  }
+
+  /**
+   * Check if we should show read receipts (only for group chats and only for messages sent by current user)
+   */
+  shouldShowReadReceipts(msg: ChatMessage): boolean {
+    const session = this.facade.selectedSession();
+    return !!session &&
+           session.type === 'GROUP' &&
+           msg.senderId === this.facade.currentUser().id &&
+           !!msg.readBy &&
+           msg.readBy.length > 0;
   }
 }

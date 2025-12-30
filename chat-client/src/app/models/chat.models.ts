@@ -49,6 +49,9 @@ export interface ChatMessage {
   
   // [NEW] Delete for me feature (UI doesn't need this, backend filters it out)
   deletedForUsers?: string[];
+
+  // [NEW] Read receipts - track who has seen this message (for group chat display like Messenger)
+  readBy?: string[]; // Array of user IDs who have read this message
 }
 
 // 3. Interface Chat Room (Mapping trực tiếp từ JSON API Backend)

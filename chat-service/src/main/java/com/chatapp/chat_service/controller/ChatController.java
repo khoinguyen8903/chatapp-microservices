@@ -16,6 +16,7 @@ import com.chatapp.chat_service.service.ChatRoomService;
 import com.chatapp.chat_service.service.UserStatusService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -784,15 +785,40 @@ public class ChatController {
 
             System.out.println("🚪 [ChatController] Leave request - Room: " + roomId + ", User: " + userId);
 
-            ChatRoom updatedRoom = chatRoomService.leaveGroup(roomId, userId);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = chatRoomService.leaveGroup(roomId, userId);
+            ChatRoom updatedRoom = (ChatRoom) result.get("room");
+            ChatMessage systemMessage = (ChatMessage) result.get("systemMessage");
+            String leavingUserId = (String) result.get("leavingUserId");
 
-            // Broadcast WebSocket event
-            broadcastRoomUpdate(roomId, updatedRoom);
+            // [FIX] Send system message to group chat topic so it appears immediately in chat window
+            if (systemMessage != null) {
+                messagingTemplate.convertAndSend("/topic/chat/" + roomId, systemMessage);
+                System.out.println("📢 [ChatController] Sent system message to group chat topic for leave");
+            }
+
+            // Broadcast WebSocket event with member count update
+            Map<String, Object> leaveEvent = new java.util.HashMap<>();
+            leaveEvent.put("type", "MEMBER_LEFT");
+            leaveEvent.put("roomId", roomId);
+            leaveEvent.put("room", updatedRoom);
+            leaveEvent.put("leavingUserId", leavingUserId);
+
+            // Broadcast to room topic
+            messagingTemplate.convertAndSend("/topic/chat-room/" + roomId + "/updated", leaveEvent);
+
+            // Notify remaining members via their personal topics
+            if (updatedRoom.getMemberIds() != null) {
+                for (String memberId : updatedRoom.getMemberIds()) {
+                    messagingTemplate.convertAndSend("/topic/" + memberId, leaveEvent);
+                }
+            }
 
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "Left group successfully",
-                    "room", updatedRoom
+                    "room", updatedRoom,
+                    "systemMessage", systemMessage != null ? systemMessage : Map.of()
             ));
         } catch (RuntimeException e) {
             System.err.println("❌ [ChatController] Error leaving group: " + e.getMessage());
@@ -904,19 +930,22 @@ public class ChatController {
             @SuppressWarnings("unchecked")
             List<String> addedUserIds = (List<String>) result.get("addedUserIds");
 
+            // [FIX] Send system message to group chat topic so it appears immediately in chat window
+            if (systemMessage != null) {
+                messagingTemplate.convertAndSend("/topic/chat/" + roomId, systemMessage);
+                System.out.println("📢 [ChatController] Sent system message to group chat topic");
+            }
+
             // Broadcast WebSocket event
             Map<String, Object> addEvent = new java.util.HashMap<>();
             addEvent.put("type", "MEMBERS_ADDED");
             addEvent.put("roomId", roomId);
             addEvent.put("room", updatedRoom);
             addEvent.put("addedUserIds", addedUserIds);
-            if (systemMessage != null) {
-                addEvent.put("systemMessage", systemMessage);
-            }
-            
+
             // Broadcast to room topic
             messagingTemplate.convertAndSend("/topic/chat-room/" + roomId + "/updated", addEvent);
-            
+
             // Notify existing members (exclude newly added members to avoid duplicate events)
             if (updatedRoom.getMemberIds() != null) {
                 for (String memberId : updatedRoom.getMemberIds()) {
@@ -954,6 +983,38 @@ public class ChatController {
                     "success", false,
                     "error", "Internal server error"
             ));
+        }
+    }
+
+    /**
+     * [NEW] Get message read receipts (who has seen this message)
+     * Returns list of user IDs who have marked the message as seen
+     * Used for showing avatars like Messenger in group chats
+     */
+    @GetMapping("/messages/{messageId}/read-receipts")
+    public ResponseEntity<?> getMessageReadReceipts(
+            @PathVariable String messageId,
+            @RequestHeader("X-User-Id") String requestUserId) {
+
+        try {
+            ChatMessage message = chatMessageService.findById(messageId);
+
+            // Get read receipts
+            List<String> readBy = message.getReadBy();
+            if (readBy == null) {
+                readBy = new java.util.ArrayList<>();
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "messageId", messageId,
+                    "readBy", readBy,
+                    "readCount", readBy.size()
+            ));
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error getting read receipts: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Internal server error"));
         }
     }
 

@@ -840,7 +840,7 @@
 
   .status-icon {
     font-size: 0.75rem;
-    
+
     &.seen {
       color: #6366f1;
     }
@@ -860,6 +860,41 @@
     font-weight: 600;
     letter-spacing: 0.02em;
     margin-left: 0.125rem;
+  }
+
+  // ===== READ RECEIPTS (Like Messenger) =====
+  .read-receipts {
+    display: flex;
+    align-items: center;
+    gap: -6px; // Overlap avatars slightly like Messenger
+    margin-left: 0.5rem;
+
+    .read-receipt-avatar {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid #6366f1; // Match message bubble color
+      object-fit: cover;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+
+      &:hover {
+        transform: scale(1.2);
+        z-index: 10;
+      }
+
+      // For received messages, use different border color
+      .message-wrapper.received & {
+        border-color: #ffffff;
+      }
+    }
+  }
+
+  // Show only up to 3 avatars to avoid clutter
+  .read-receipts {
+    img:nth-child(n+4) {
+      display: none;
+    }
   }
 }
 

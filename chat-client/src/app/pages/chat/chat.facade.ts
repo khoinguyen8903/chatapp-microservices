@@ -667,6 +667,21 @@ export class ChatFacade {
             this.selectSession(null);
           }
         }
+      } else if (event.type === 'MEMBER_LEFT' && event.room) {
+        // Cập nhật số thành viên khi có người rời nhóm (leave)
+        const updatedRoom = event.room;
+        this.updateSessionMemberCount(updatedRoom.chatId, updatedRoom.memberIds?.length || 0);
+
+        // Nếu chính mình là người rời, xóa session đó
+        const currentUserId = this.currentUser().id;
+        if (event.leavingUserId === currentUserId) {
+          this.removeSession(updatedRoom.chatId);
+          // Nếu đang ở nhóm này, clear selection
+          const selectedSession = this.selectedSession();
+          if (selectedSession && selectedSession.id === updatedRoom.chatId) {
+            this.selectSession(null);
+          }
+        }
       } else if (event.eventType === 'ROOM_UPDATED' && event.room) {
         // Cập nhật thông tin nhóm
         const updatedRoom = event.room;

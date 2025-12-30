@@ -531,38 +531,80 @@ public class ChatRoomService {
     /**
      * Leave the group.
      * Constraint: OWNER cannot leave. They must delete the group or transfer ownership first.
+     * Creates a system message and returns a Map with updated room and system message.
      */
-    public ChatRoom leaveGroup(String roomId, String userId) {
+    public Map<String, Object> leaveGroup(String roomId, String userId) {
         Optional<ChatRoom> roomOpt = chatRoomRepository.findByChatId(roomId);
-        
+
         if (roomOpt.isEmpty()) {
             throw new RuntimeException("Room not found: " + roomId);
         }
-        
+
         ChatRoom room = roomOpt.get();
-        
+
         if (!room.isGroup()) {
             throw new RuntimeException("Room is not a group: " + roomId);
         }
-        
+
         // Check if user is owner
         String currentRole = getRole(roomId, userId);
         if ("OWNER".equals(currentRole)) {
             throw new RuntimeException("Owner cannot leave the group. Please delete the group or transfer ownership first.");
         }
-        
+
+        // Get username of the user leaving
+        String leavingUsername = userId; // Fallback to ID if we can't get the username
+        try {
+            UserDTO user = userClient.getUserById(userId);
+            if (user != null && user.getUsername() != null) {
+                leavingUsername = user.getUsername();
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ [ChatRoomService] Failed to fetch username for " + userId + ": " + e.getMessage());
+        }
+
+        // Create system message for the group
+        ChatMessage systemMessage = null;
+        try {
+            String systemMessageContent = leavingUsername + " đã rời nhóm";
+
+            systemMessage = ChatMessage.builder()
+                    .chatId(roomId)
+                    .senderId("SYSTEM")
+                    .recipientId(roomId)
+                    .content(systemMessageContent)
+                    .type(MessageType.SYSTEM)
+                    .status(MessageStatus.SEEN)
+                    .timestamp(new Date())
+                    .build();
+
+            systemMessage = chatMessageRepository.save(systemMessage);
+            System.out.println("📢 [ChatRoomService] Created system message for leave group: " + systemMessageContent);
+        } catch (Exception e) {
+            System.err.println("⚠️ [ChatRoomService] Failed to create system message: " + e.getMessage());
+            // Continue even if system message fails
+        }
+
         // Remove from memberIds
         if (room.getMemberIds() != null) {
             room.getMemberIds().remove(userId);
         }
-        
+
         // Remove from adminIds if they were an admin
         if (room.getAdminIds() != null) {
             room.getAdminIds().remove(userId);
         }
-        
+
+        ChatRoom updatedRoom = chatRoomRepository.save(room);
         System.out.println("✅ [ChatRoomService] User " + userId + " left room " + roomId);
-        return chatRoomRepository.save(room);
+
+        // Return result with system message
+        Map<String, Object> result = new HashMap<>();
+        result.put("room", updatedRoom);
+        result.put("systemMessage", systemMessage);
+        result.put("leavingUserId", userId);
+
+        return result;
     }
 
     /**
