@@ -458,28 +458,53 @@ public class ChatRoomService {
             throw new RuntimeException("Admins can only kick members");
         }
         
-        // [NEW] Create system message BEFORE removing user (so they can see it)
-        // Personal message for the kicked user: "Bạn đã bị mời ra khỏi nhóm"
-        ChatMessage systemMessage = null;
+        // [FIX] Create TWO separate system messages for different audiences:
+        // 1. For the kicked user: "Bạn đã bị mời ra khỏi nhóm"
+        // 2. For remaining members: "{username} đã bị mời ra khỏi nhóm"
+        ChatMessage personalMessageForKickedUser = null;
+        ChatMessage publicMessageForGroup = null;
         try {
+            // Get the username of the kicked user for the public message
+            String kickedUsername = targetUserId; // Fallback to ID if we can't get the username
+            try {
+                var userDTO = userClient.getUserById(targetUserId);
+                if (userDTO != null && userDTO.getUsername() != null) {
+                    kickedUsername = userDTO.getUsername();
+                }
+            } catch (Exception e) {
+                System.err.println("⚠️ [ChatRoomService] Failed to fetch username for " + targetUserId + ": " + e.getMessage());
+            }
+
             // Create personalized message for the kicked user
-            String systemMessageContent = "Bạn đã bị mời ra khỏi nhóm";
-            
-            systemMessage = ChatMessage.builder()
+            String personalMessageContent = "Bạn đã bị mời ra khỏi nhóm";
+            personalMessageForKickedUser = ChatMessage.builder()
                     .chatId(roomId)
                     .senderId("SYSTEM")
-                    .recipientId(roomId)
-                    .content(systemMessageContent)
+                    .recipientId(targetUserId) // Only for the kicked user
+                    .content(personalMessageContent)
                     .type(MessageType.SYSTEM)
-                    .status(MessageStatus.SEEN) // System messages are always "seen"
+                    .status(MessageStatus.SEEN)
                     .timestamp(new Date())
                     .build();
-            
-            systemMessage = chatMessageRepository.save(systemMessage);
-            System.out.println("📢 [ChatRoomService] Created system message for kicked user: " + systemMessageContent);
+            personalMessageForKickedUser = chatMessageRepository.save(personalMessageForKickedUser);
+            System.out.println("📢 [ChatRoomService] Created personal message for kicked user: " + personalMessageContent);
+
+            // Create public message for remaining members
+            String publicMessageContent = kickedUsername + " đã bị mời ra khỏi nhóm";
+            publicMessageForGroup = ChatMessage.builder()
+                    .chatId(roomId)
+                    .senderId("SYSTEM")
+                    .recipientId(roomId) // For the group
+                    .content(publicMessageContent)
+                    .type(MessageType.SYSTEM)
+                    .status(MessageStatus.SEEN)
+                    .timestamp(new Date())
+                    .build();
+            publicMessageForGroup = chatMessageRepository.save(publicMessageForGroup);
+            System.out.println("📢 [ChatRoomService] Created public message for group: " + publicMessageContent);
         } catch (Exception e) {
-            System.err.println("⚠️ [ChatRoomService] Failed to create system message: " + e.getMessage());
-            // Continue with kick even if system message fails
+            System.err.println("⚠️ [ChatRoomService] Failed to create system messages: " + e.getMessage());
+            // Continue with kick even if system messages fail
         }
         
         // Remove from memberIds
@@ -494,11 +519,12 @@ public class ChatRoomService {
         
         ChatRoom updatedRoom = chatRoomRepository.save(room);
         System.out.println("✅ [ChatRoomService] Kicked user " + targetUserId + " from room " + roomId);
-        
-        // Return both room and system message
+
+        // Return room and both system messages
         Map<String, Object> result = new HashMap<>();
         result.put("room", updatedRoom);
-        result.put("systemMessage", systemMessage);
+        result.put("personalMessage", personalMessageForKickedUser);
+        result.put("publicMessage", publicMessageForGroup);
         return result;
     }
 

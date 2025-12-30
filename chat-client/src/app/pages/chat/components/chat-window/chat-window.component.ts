@@ -1669,6 +1669,7 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
       next: () => {
         console.log('✅ Kicked member from group');
         this.loadGroupMembers(); // Reload members list
+        this.facade.loadRooms(); // Reload sidebar to show updated group
         this.cdr.markForCheck();
       },
       error: (err) => {
@@ -1693,6 +1694,8 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     this.chatService.leaveGroup(roomId).subscribe({
       next: () => {
         console.log('✅ Left group');
+        // Reload sidebar to remove group from list
+        this.facade.loadRooms();
         // Navigate back to sidebar or close chat
         this.facade.selectSession(null);
         this.closeRightSidebar();
@@ -1758,6 +1761,8 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     this.chatService.deleteGroup(roomId).subscribe({
       next: () => {
         console.log('✅ Deleted group');
+        // Reload sidebar to remove group from list
+        this.facade.loadRooms();
         // Navigate back to sidebar
         this.facade.selectSession(null);
         this.closeRightSidebar();

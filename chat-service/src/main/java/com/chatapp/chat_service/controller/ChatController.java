@@ -290,7 +290,21 @@ public class ChatController {
                 if (o != null) memberIds.add(String.valueOf(o));
             }
         }
-        return ResponseEntity.ok(chatRoomService.createGroupChat(adminId, groupName, memberIds));
+        
+        ChatRoom groupRoom = chatRoomService.createGroupChat(adminId, groupName, memberIds);
+        
+        // [NEW] Send WebSocket event to all members so the group appears in their sidebar immediately
+        Map<String, Object> roomAddedEvent = new java.util.HashMap<>();
+        roomAddedEvent.put("type", "ROOM_ADDED");
+        roomAddedEvent.put("room", groupRoom);
+        
+        // Notify all group members
+        for (String memberId : groupRoom.getMemberIds()) {
+            System.out.println("📢 [ChatController] Sending ROOM_ADDED event to user: " + memberId);
+            messagingTemplate.convertAndSend("/topic/" + memberId, roomAddedEvent);
+        }
+        
+        return ResponseEntity.ok(groupRoom);
     }
 
     @MessageMapping("/typing")
@@ -690,35 +704,41 @@ public class ChatController {
 
             Map<String, Object> kickResult = chatRoomService.kickMember(
                     roomId, currentUserId, request.getTargetUserId());
-            
-            ChatRoom updatedRoom = (ChatRoom) kickResult.get("room");
-            ChatMessage systemMessage = (ChatMessage) kickResult.get("systemMessage");
 
-            // Broadcast WebSocket event with system message
+            ChatRoom updatedRoom = (ChatRoom) kickResult.get("room");
+            ChatMessage personalMessage = (ChatMessage) kickResult.get("personalMessage");
+            ChatMessage publicMessage = (ChatMessage) kickResult.get("publicMessage");
+
+            // Broadcast WebSocket event
             Map<String, Object> kickEvent = new java.util.HashMap<>();
             kickEvent.put("type", "MEMBER_REMOVED");
             kickEvent.put("roomId", roomId);
             kickEvent.put("kickedUserId", request.getTargetUserId());
             kickEvent.put("room", updatedRoom);
-            if (systemMessage != null) {
-                kickEvent.put("systemMessage", systemMessage);
+
+            // [FIX] Send personal message ONLY to the kicked user
+            if (personalMessage != null) {
+                messagingTemplate.convertAndSend("/topic/" + request.getTargetUserId(), personalMessage);
+                System.out.println("📢 [ChatController] Sent personal message to kicked user: " + request.getTargetUserId());
             }
-            
-            // [IMPORTANT] Broadcast system message to chat topic so it appears in chat window
-            if (systemMessage != null) {
-                messagingTemplate.convertAndSend("/topic/chat/" + roomId, systemMessage);
+
+            // [FIX] Send public message to remaining group members
+            if (publicMessage != null) {
+                // Send to chat topic so it appears in chat window for remaining members
+                messagingTemplate.convertAndSend("/topic/chat/" + roomId, publicMessage);
+                System.out.println("📢 [ChatController] Sent public message to group chat topic");
             }
-            
+
             // Broadcast to room topic
             messagingTemplate.convertAndSend("/topic/chat-room/" + roomId + "/updated", kickEvent);
-            
-            // Also notify all members via their personal topics
+
+            // Notify all remaining members via their personal topics
             if (updatedRoom.getMemberIds() != null) {
                 for (String memberId : updatedRoom.getMemberIds()) {
                     messagingTemplate.convertAndSend("/topic/" + memberId, kickEvent);
                 }
             }
-            
+
             // Notify the kicked user (even if they're no longer in memberIds)
             messagingTemplate.convertAndSend("/topic/" + request.getTargetUserId(), kickEvent);
 
@@ -726,7 +746,8 @@ public class ChatController {
                     "success", true,
                     "message", "Member kicked successfully",
                     "room", updatedRoom,
-                    "systemMessage", systemMessage != null ? systemMessage : Map.of()
+                    "personalMessage", personalMessage != null ? personalMessage : Map.of(),
+                    "publicMessage", publicMessage != null ? publicMessage : Map.of()
             ));
         } catch (RuntimeException e) {
             System.err.println("❌ [ChatController] Error kicking member: " + e.getMessage());
@@ -896,10 +917,12 @@ public class ChatController {
             // Broadcast to room topic
             messagingTemplate.convertAndSend("/topic/chat-room/" + roomId + "/updated", addEvent);
             
-            // Notify all existing members
+            // Notify existing members (exclude newly added members to avoid duplicate events)
             if (updatedRoom.getMemberIds() != null) {
                 for (String memberId : updatedRoom.getMemberIds()) {
-                    messagingTemplate.convertAndSend("/topic/" + memberId, addEvent);
+                    if (!addedUserIds.contains(memberId)) {
+                        messagingTemplate.convertAndSend("/topic/" + memberId, addEvent);
+                    }
                 }
             }
             

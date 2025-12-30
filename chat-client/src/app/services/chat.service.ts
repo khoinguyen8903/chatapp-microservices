@@ -98,7 +98,7 @@ export class ChatService {
           }
 
           // [NEW] Group management events
-          if (payload.type === 'MEMBERS_ADDED' || payload.type === 'MEMBER_REMOVED' || payload.type === 'ROOM_ADDED') {
+          if (payload.type === 'MEMBERS_ADDED' || payload.type === 'MEMBER_REMOVED' || payload.type === 'ROOM_ADDED' || payload.eventType === 'ROOM_UPDATED') {
               _this.groupEventSubject.next(payload);
               return;
           }

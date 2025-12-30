@@ -406,8 +406,39 @@ export class ChatFacade {
       console.log('🔍 [Facade] Message belongs to current session?', isBelongToCurrentSession,
                   '- MessageChatId:', chatId, 'SessionChatId:', sessionIdToMatch);
 
-      // Nếu đúng session đang mở -> thêm vào list messages
-      if (isBelongToCurrentSession) {
+      // [FIX] Filter system messages for real-time updates
+      const shouldDisplayMessage = (() => {
+        // Non-system messages: always display if belongs to current session
+        if (msg.type !== MessageType.SYSTEM) {
+          return isBelongToCurrentSession;
+        }
+
+        // System messages: check recipientId
+        if (!isBelongToCurrentSession || !currentSession) {
+          return false; // Not in current session
+        }
+
+        const sessionChatId = currentSession.id;
+
+        // Public system message (recipientId == chatId): Show to all
+        if (msg.recipientId === sessionChatId) {
+          console.log('✅ [Facade] Displaying public system message for group');
+          return true;
+        }
+
+        // Personal system message (recipientId == userId): Only show to that user
+        if (msg.recipientId === currentUserId) {
+          console.log('✅ [Facade] Displaying personal system message for user');
+          return true;
+        }
+
+        // Personal message for someone else: Don't display
+        console.log('🚫 [Facade] Filtering out personal system message for another user');
+        return false;
+      })();
+
+      // Nếu đúng session đang mở và được phép hiển thị -> thêm vào list messages
+      if (shouldDisplayMessage) {
         this.messages.update(old => {
           // [NEW] Populate replyToMessage if this message is a reply
           if (msg.replyToId) {
@@ -607,6 +638,42 @@ export class ChatFacade {
       this.updateChatRoomPreview(chatId, lastMessage);
     });
     this.subscriptions.add(previewSub);
+
+    // 7. [NEW] Group management events - update UI immediately when group changes
+    const groupEventSub = this.chatService.onGroupEvent().subscribe((event) => {
+      console.log('👥 [Facade] Received group event:', event);
+
+      // Xử lý cập nhật trực tiếp để UI update ngay lập tức
+      if (event.type === 'ROOM_ADDED' && event.room) {
+        // Thêm nhóm mới vào sessions
+        const newRoom = event.room;
+        this.addOrUpdateSessionFromRoom(newRoom);
+      } else if (event.type === 'MEMBERS_ADDED' && event.room) {
+        // Cập nhật số thành viên khi có người mới
+        const updatedRoom = event.room;
+        this.updateSessionMemberCount(updatedRoom.chatId, updatedRoom.memberIds?.length || 0);
+      } else if (event.type === 'MEMBER_REMOVED' && event.room) {
+        // Cập nhật số thành viên khi có người bị kick
+        const updatedRoom = event.room;
+        this.updateSessionMemberCount(updatedRoom.chatId, updatedRoom.memberIds?.length || 0);
+
+        // Nếu chính mình bị kick, xóa session đó
+        const currentUserId = this.currentUser().id;
+        if (event.kickedUserId === currentUserId) {
+          this.removeSession(updatedRoom.chatId);
+          // Nếu đang ở nhóm này, clear selection
+          const selectedSession = this.selectedSession();
+          if (selectedSession && selectedSession.id === updatedRoom.chatId) {
+            this.selectSession(null);
+          }
+        }
+      } else if (event.eventType === 'ROOM_UPDATED' && event.room) {
+        // Cập nhật thông tin nhóm
+        const updatedRoom = event.room;
+        this.addOrUpdateSessionFromRoom(updatedRoom);
+      }
+    });
+    this.subscriptions.add(groupEventSub);
   }
 
   // --- API CALLS & LOGIC ---
@@ -784,8 +851,35 @@ export class ChatFacade {
 
     // Load Messages
     this.chatService.getChatMessages(this.currentUser().id, session.id).subscribe(msgs => {
+      const currentUserId = this.currentUser().id;
+      const sessionChatId = session.id;
+
+      // [FIX] Filter system messages:
+      // - Personal system messages (recipientId == specific userId): Only show to that user
+      // - Public system messages (recipientId == chatId): Show to all members
+      const filteredMessages = msgs.filter(msg => {
+        // If not a system message, always show it
+        if (msg.type !== MessageType.SYSTEM) {
+          return true;
+        }
+
+        // System message logic:
+        // If recipientId matches the chatId (groupId) → Public message → Show to all
+        if (msg.recipientId === sessionChatId) {
+          return true;
+        }
+
+        // If recipientId matches current user's ID → Personal message → Only show to this user
+        if (msg.recipientId === currentUserId) {
+          return true;
+        }
+
+        // Otherwise, this is a personal message for someone else → Don't show it
+        return false;
+      });
+
       // [NEW] Populate replyToMessage for messages that have replyToId
-      const enrichedMessages = msgs.map(msg => {
+      const enrichedMessages = filteredMessages.map(msg => {
         if (msg.replyToId) {
           // Find the replied-to message in the same message list
           const replyToMessage = msgs.find(m => m.id === msg.replyToId);
@@ -896,6 +990,116 @@ export class ChatFacade {
     const currentId = this.currentUser()?.id;
     if (!currentId) return room.recipientId;
     return room.senderId === currentId ? room.recipientId : room.senderId;
+  }
+
+  /**
+   * Thêm hoặc update session từ ChatRoom (dùng để update UI ngay lập tức)
+   */
+  private addOrUpdateSessionFromRoom(room: ChatRoom) {
+    if (!room) return;
+
+    // Convert room to session
+    const session = this.mapRoomToSession(room);
+
+    this.sessions.update((sessions) => {
+      const existingIndex = sessions.findIndex(s => s.id === session.id);
+      if (existingIndex >= 0) {
+        // Update session hiện có
+        const updatedSessions = [...sessions];
+        updatedSessions[existingIndex] = session;
+        return updatedSessions;
+      } else {
+        // Thêm session mới ở đầu list
+        return [session, ...sessions];
+      }
+    });
+
+    // Update rawRooms để đồng bộ
+    this.rawRooms.update(rooms => {
+      const existingIndex = rooms.findIndex(r => r.chatId === room.chatId);
+      if (existingIndex >= 0) {
+        const updatedRooms = [...rooms];
+        updatedRooms[existingIndex] = room;
+        return updatedRooms;
+      } else {
+        return [room, ...rooms];
+      }
+    });
+  }
+
+  /**
+   * Cập nhật số thành viên của nhóm (update UI ngay lập tức)
+   */
+  private updateSessionMemberCount(chatId: string, memberCount: number) {
+    this.sessions.update(sessions => {
+      return sessions.map(session => {
+        if (session.id === chatId && session.type === 'GROUP') {
+          return { ...session, memberCount };
+        }
+        return session;
+      });
+    });
+
+    // Cập nhật rawRooms
+    this.rawRooms.update(rooms => {
+      return rooms.map(room => {
+        if (room.chatId === chatId && room.isGroup) {
+          return { ...room, memberIds: room.memberIds || [] };
+        }
+        return room;
+      });
+    });
+  }
+
+  /**
+   * Xóa session khỏi list
+   */
+  private removeSession(chatId: string) {
+    this.sessions.update(sessions => sessions.filter(session => session.id !== chatId));
+
+    // Xóa khỏi rawRooms
+    this.rawRooms.update(rooms => rooms.filter(room => room.chatId !== chatId));
+  }
+
+  /**
+   * Convert một ChatRoom thành ChatSession (helper riêng lẻ)
+   */
+  private mapRoomToSession(room: ChatRoom): ChatSession {
+    if (room.isGroup) {
+      return {
+        id: room.chatId,
+        name: room.groupName || 'Nhóm không tên',
+        avatar: GROUP_AVATAR,
+        type: 'GROUP',
+        memberCount: room.memberIds ? room.memberIds.length : 0,
+        unreadCount: room.unreadCount || 0,
+        lastMessage: this.formatLastMessagePreview(room.lastMessage),
+        lastMessageTimestamp: room.lastMessageTimestamp ? new Date(room.lastMessageTimestamp) : undefined
+      } as ChatSession;
+    } else {
+      const partnerId = this.getPartnerId(room);
+      let fullName = 'Loading...';
+      let avatar = DEFAULT_AVATAR;
+
+      if (this.userCache.has(partnerId)) {
+        const cached = this.userCache.get(partnerId)!;
+        fullName = cached.username;
+        avatar = this.normalizeAvatarUrl(cached.avatarUrl);
+      } else {
+        this.fetchUserInfo(partnerId);
+      }
+
+      return {
+        id: partnerId,
+        name: fullName,
+        avatar: avatar,
+        type: 'PRIVATE',
+        status: 'OFFLINE',
+        unreadCount: room.unreadCount || 0,
+        lastMessage: this.formatLastMessagePreview(room.lastMessage),
+        lastMessageTimestamp: room.lastMessageTimestamp ? new Date(room.lastMessageTimestamp) : undefined
+      } as ChatSession;
+    }
   }
 
   private checkAndReloadSessions(msg: ChatMessage) {
