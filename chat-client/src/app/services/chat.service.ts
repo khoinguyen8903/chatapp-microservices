@@ -119,7 +119,10 @@ export class ChatService {
               reactions: (payload.reactions || []) as MessageReaction[],
               replyToId: payload.replyToId,
               messageStatus: payload.messageStatus,
-              senderName: payload.senderName
+              senderName: payload.senderName,
+              // [FIX] Include read receipts for realtime updates in group chats
+              readBy: payload.readBy || [],
+              readCount: payload.readCount || 0
             };
             _this.messageUpdateSubject.next(updated);
             return;
@@ -140,7 +143,7 @@ export class ChatService {
               id: payload.id,
               chatId: payload.chatId,  // [CRITICAL] Explicit chatId from backend
               senderId: payload.senderId,
-              recipientId: payload.recipientId, 
+              recipientId: payload.recipientId,
               content: payload.content,
               fileName: payload.fileName, // Include original filename for file attachments
               timestamp: new Date(),
@@ -148,7 +151,10 @@ export class ChatService {
               status: payload.status || MessageStatus.SENT,
               reactions: (payload.reactions || []) as MessageReaction[],
               replyToId: payload.replyToId, // [NEW] Reply info
-              messageStatus: payload.messageStatus // [NEW] Revoke status
+              messageStatus: payload.messageStatus, // [NEW] Revoke status
+              senderName: payload.senderName || 'Member', // [FIX] Include sender name for group chats with fallback
+              readBy: payload.readBy || [], // [FIX] Include read receipts for group chats
+              readCount: payload.readCount || 0 // [FIX] Include read count for group chats
           };
 
           // [CRITICAL FIX] Only mark as DELIVERED if message is not already SEEN
@@ -282,7 +288,10 @@ export class ChatService {
           // [IMPORTANT] These fields are required for reply/revoke features.
           // Backend sends them on ChatMessage for both react + revoke broadcasts.
           replyToId: payload.replyToId,
-          messageStatus: payload.messageStatus
+          messageStatus: payload.messageStatus,
+          // [FIX] Include read receipts for realtime updates in group chats
+          readBy: payload.readBy || [],
+          readCount: payload.readCount || 0
         };
 
         this.messageUpdateSubject.next(updated);

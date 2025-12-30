@@ -615,6 +615,9 @@ export class ChatFacade {
           replyToId: updated.replyToId ?? current.replyToId,
           messageStatus: updated.messageStatus ?? current.messageStatus,
           timestamp: updated.timestamp ?? current.timestamp,
+          // [FIX] Preserve read receipts from updates
+          readBy: updated.readBy ?? current.readBy ?? [],
+          readCount: updated.readCount ?? current.readCount ?? 0,
           // preserve UI-only state
           showReactionBar: current.showReactionBar,
           isPlaying: current.isPlaying,

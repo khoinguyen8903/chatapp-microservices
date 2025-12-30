@@ -13,9 +13,16 @@ services:
       - auth-service
       - chat-service
       - media-service
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     environment:
       JWT_SECRET: "mysecretkey123456789012345678901234"
       JWT_EXPIRATION_MS: 86400000
+      JAVA_OPTS: "-Xms256m -Xmx400m"
 
   # --- AUTH SERVICE ---
   auth-service:
@@ -27,6 +34,12 @@ services:
       - app-network
     depends_on:
       - postgres-db
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 384M
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/authdb?options=-c%20timezone=Asia/Ho_Chi_Minh
       SPRING_DATASOURCE_USERNAME: postgres
@@ -40,6 +53,7 @@ services:
       MAIL_USERNAME: nguyenlepdp0809@gmail.com
       MAIL_PASSWORD: gwqc utct kimh bnin
       APP_BASE_URL: https://api.chatify.asia
+      JAVA_OPTS: "-Xms384m -Xmx600m"
 
   # --- AUTH DATABASE ---
   postgres-db:
@@ -49,6 +63,12 @@ services:
       - "5432:5432"
     networks:
       - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     environment:
       POSTGRES_DB: authdb
       POSTGRES_USER: postgres
@@ -56,6 +76,7 @@ services:
       TZ: Asia/Ho_Chi_Minh
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=100"]
 
   # --- MEDIA SERVICE ---
   media-service:
@@ -68,6 +89,12 @@ services:
     depends_on:
       - media-db
       - minio
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 384M
     environment:
       SERVER_PORT: 8083
       SPRING_DATASOURCE_URL: jdbc:postgresql://media-db:5432/mediadb?options=-c%20timezone=Asia/Ho_Chi_Minh
@@ -78,6 +105,7 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: chatapp-files
+      JAVA_OPTS: "-Xms384m -Xmx600m"
 
   # --- MEDIA DATABASE ---
   media-db:
@@ -87,6 +115,12 @@ services:
       - "5434:5432"
     networks:
       - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     environment:
       POSTGRES_DB: mediadb     
       POSTGRES_USER: postgres
@@ -94,6 +128,7 @@ services:
       TZ: Asia/Ho_Chi_Minh
     volumes:
       - media_data:/var/lib/postgresql/data
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=100"]
 
   # --- MINIO ---
   minio:
@@ -110,6 +145,12 @@ services:
       - app-network
     volumes:
       - minio_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
   # --- CHAT SERVICE ---
   chat-service:
@@ -121,10 +162,17 @@ services:
       - app-network
     depends_on:
       - chat-mongo
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 384M
     environment:
       SERVER_PORT: 8082
       SPRING_DATA_MONGODB_URI: mongodb://chat-mongo:27017/chatdb
       NOTIFICATION_SERVICE_URL: http://notification-service:8080
+      JAVA_OPTS: "-Xms384m -Xmx600m"
 
   # --- CHAT DATABASE ---
   chat-mongo:
@@ -136,6 +184,13 @@ services:
       - app-network
     volumes:
       - chat_mongo_data:/data/db
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.3"]
 
   # --- FRONTEND ---
   frontend:
@@ -147,6 +202,12 @@ services:
       - app-network
     depends_on:
       - api-gateway
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
   # --- REDIS ---
   redis:
@@ -155,7 +216,14 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - app-network 
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"] 
 
   # --- NOTIFICATION SERVICE ---
   notification-service:
@@ -167,11 +235,18 @@ services:
       - app-network
     depends_on:
       - redis
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     environment:
       SERVER_PORT: 8080
       SPRING_DATA_REDIS_HOST: redis 
       SPRING_DATA_REDIS_PORT: 6379
       APP_FIREBASE_CONFIG: classpath:firebase-service-account.json
+      JAVA_OPTS: "-Xms256m -Xmx400m"
 
   # --- CLOUDFLARE TUNNEL (ĐÃ THÊM MỚI) ---
   tunnel:
@@ -181,6 +256,12 @@ services:
     command: tunnel run
     networks:
       - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
     environment:
       # Token đã được thêm vào đây
       TUNNEL_TOKEN: "eyJhIjoiNTdhODE2YjBhN2Y1ZjY2NTZjOTBhZTdiYTYwM2U3ZDUiLCJ0IjoiZTg5YzkwOWItYWQ5Mi00YzA3LWJkZWUtMGI1NmMyMjU0MGY0IiwicyI6Ik5qWXdPRFE0TURjdE9EVXhaQzAwTTJOaUxUZzVOV1F0WXpSa1pUQmlNemxoWkRRMSJ9"

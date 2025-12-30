@@ -52,6 +52,7 @@ export interface ChatMessage {
 
   // [NEW] Read receipts - track who has seen this message (for group chat display like Messenger)
   readBy?: string[]; // Array of user IDs who have read this message
+  readCount?: number; // Number of users who have read this message (for display)
 }
 
 // 3. Interface Chat Room (Mapping trực tiếp từ JSON API Backend)
