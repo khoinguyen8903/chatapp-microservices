@@ -1,0 +1,333 @@
+{
+	"info": {
+		"_postman_id": "friend-service-collection-id",
+		"name": "Friend Service API - Chatify",
+		"description": "Complete collection for testing Friend Service API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "0. Login - Get Token",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"username\": \"your_username\",\n  \"password\": \"your_password\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/auth/login",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "auth", "login"]
+				},
+				"description": "Login to get JWT token"
+			},
+			"response": []
+		},
+		{
+			"name": "1. Get My User ID",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/users/profile",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "users", "profile"]
+				},
+				"description": "Get current user profile to extract user ID"
+			},
+			"response": []
+		},
+		{
+			"name": "2. Send Friend Request",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"receiverId\": \"another_user_uuid_here\",\n  \"message\": \"Chào bạn, mình muốn kết bạn!\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/request",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "request"]
+				},
+				"description": "Send a friend request to another user"
+			},
+			"response": []
+		},
+		{
+			"name": "3. Get Received Friend Requests",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/requests/received",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "requests", "received"]
+				},
+				"description": "Get list of received friend requests"
+			},
+			"response": []
+		},
+		{
+			"name": "4. Get Sent Friend Requests",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/requests/sent",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "requests", "sent"]
+				},
+				"description": "Get list of sent friend requests"
+			},
+			"response": []
+		},
+		{
+			"name": "5. Accept Friend Request",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/requests/{{requestId}}/accept",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "requests", "{{requestId}}", "accept"]
+				},
+				"description": "Accept a pending friend request"
+			},
+			"response": []
+		},
+		{
+			"name": "6. Reject Friend Request",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/requests/{{requestId}}/reject",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "requests", "{{requestId}}", "reject"]
+				},
+				"description": "Reject a pending friend request"
+			},
+			"response": []
+		},
+		{
+			"name": "7. Cancel Friend Request",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/requests/{{requestId}}",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "requests", "{{requestId}}"]
+				},
+				"description": "Cancel a pending friend request"
+			},
+			"response": []
+		},
+		{
+			"name": "8. Get Friends List",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends"]
+				},
+				"description": "Get list of friends"
+			},
+			"response": []
+		},
+		{
+			"name": "9. Get Friendship Status",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/{{friendId}}/status",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "{{friendId}}", "status"]
+				},
+				"description": "Check friendship status with a specific user"
+			},
+			"response": []
+		},
+		{
+			"name": "10. Block User",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/{{friendId}}/block",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "{{friendId}}", "block"]
+				},
+				"description": "Block a user"
+			},
+			"response": []
+		},
+		{
+			"name": "11. Unblock User",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/{{friendId}}/block",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "{{friendId}}", "block"]
+				},
+				"description": "Unblock a user"
+			},
+			"response": []
+		},
+		{
+			"name": "12. Get Blocked Users",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/blocked",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "blocked"]
+				},
+				"description": "Get list of blocked users"
+			},
+			"response": []
+		},
+		{
+			"name": "13. Unfriend User",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/{{friendId}}",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "{{friendId}}"]
+				},
+				"description": "Unfriend a user"
+			},
+			"response": []
+		},
+		{
+			"name": "14. Get Friend Recommendations",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/recommendations",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "recommendations"]
+				},
+				"description": "Get friend recommendations"
+			},
+			"response": []
+		},
+		{
+			"name": "15. Search Users",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/api/friends/search?keyword={{keyword}}",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "friends", "search"],
+					"query": [
+						{
+							"key": "keyword",
+							"value": "{{keyword}}"
+						}
+					]
+				},
+				"description": "Search for users"
+			},
+			"response": []
+		}
+	]
+}
+

@@ -89,7 +89,16 @@ spring:
           filters:
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
-        # 👇 [QUAN TRỌNG] 8. MINIO ROUTE - ĐỂ XEM/TẢI ẢNH
+        # 8. FRIEND SERVICE
+        - id: friend-service
+          uri: http://friend-service:8085
+          predicates:
+            - Path=/api/friends/**
+          filters:
+            - AuthenticationFilter
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+
+        # 👇 [QUAN TRỌNG] 9. MINIO ROUTE - ĐỂ XEM/TẢI ẢNH
         - id: minio-file-access
           uri: http://minio:9000
           predicates:

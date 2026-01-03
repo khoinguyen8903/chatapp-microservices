@@ -13,6 +13,7 @@ services:
       - auth-service
       - chat-service
       - media-service
+      - friend-service
     deploy:
       resources:
         limits:
@@ -227,7 +228,7 @@ services:
 
   # --- NOTIFICATION SERVICE ---
   notification-service:
-    build: ./notification-service 
+    build: ./notification-service
     container_name: notification-service
     ports:
       - "8084:8080"
@@ -243,10 +244,60 @@ services:
           memory: 256M
     environment:
       SERVER_PORT: 8080
-      SPRING_DATA_REDIS_HOST: redis 
+      SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       APP_FIREBASE_CONFIG: classpath:firebase-service-account.json
       JAVA_OPTS: "-Xms256m -Xmx400m"
+
+  # --- FRIEND SERVICE ---
+  friend-service:
+    build: ./friend-service
+    container_name: friend-service
+    ports:
+      - "8085:8085"
+    networks:
+      - app-network
+    depends_on:
+      - friend-db
+      - auth-service
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 384M
+    environment:
+      SERVER_PORT: 8085
+      SPRING_DATASOURCE_URL: jdbc:postgresql://friend-db:5432/frienddb?options=-c%20timezone=Asia/Ho_Chi_Minh
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: 123456
+      AUTH_SERVICE_URL: http://auth-service:8081
+      NOTIFICATION_SERVICE_URL: http://notification-service:8080
+      JWT_SECRET: "mysecretkey123456789012345678901234"
+      JAVA_OPTS: "-Xms384m -Xmx600m"
+
+  # --- FRIEND DATABASE ---
+  friend-db:
+    image: postgres:15
+    container_name: friend-db
+    ports:
+      - "5435:5432"
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    environment:
+      POSTGRES_DB: frienddb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - friend_data:/var/lib/postgresql/data
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=100"]
 
   # --- CLOUDFLARE TUNNEL (ĐÃ THÊM MỚI) ---
   tunnel:
@@ -276,3 +327,4 @@ volumes:
   chat_mongo_data:
   media_data:
   minio_data:
+  friend_data:

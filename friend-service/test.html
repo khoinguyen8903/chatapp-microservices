@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Friend Service API Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+        }
+
+        .login-section {
+            padding: 30px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .api-section {
+            padding: 30px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .api-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+
+        .api-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .api-btn {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            padding: 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .api-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .response-section {
+            padding: 30px;
+            background: #f8f9fa;
+        }
+
+        .response-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 22px;
+        }
+
+        .response-box {
+            background: #2d2d2d;
+            color: #4CAF50;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+
+        .status {
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .info-box {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .copy-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+            font-size: 12px;
+        }
+
+        .token-display {
+            background: #f8f9fa;
+            border: 2px solid #667eea;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .token-display span {
+            color: #667eea;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Friend Service API Test</h1>
+            <p>Test nhanh Friend Service bằng browser - Không cần cài đặt gì!</p>
+        </div>
+
+        <!-- Login Section -->
+        <div class="login-section">
+            <h2>📝 Đăng nhập</h2>
+            <div class="form-group">
+                <label>Username:</label>
+                <input type="text" id="username" placeholder="Nhập username của bạn">
+            </div>
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" id="password" placeholder="Nhập password của bạn">
+            </div>
+            <button class="btn" onclick="login()">Login</button>
+
+            <div id="tokenSection" class="hidden">
+                <div class="token-display">
+                    <span>✅ Token đã có sẵn! Bạn có thể copy:</span><br><br>
+                    <code id="tokenDisplay"></code>
+                    <button class="copy-btn" onclick="copyToken()">Copy Token</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Test Section -->
+        <div id="apiTestSection" class="api-section hidden">
+            <h2>🚀 Test API Endpoints</h2>
+
+            <div class="info-box">
+                <strong>💡 Lưu ý:</strong> Sau khi login, token đã được tự động thêm vào các request bên dưới. Bạn chỉ cần click vào nút để test!
+            </div>
+
+            <div class="api-grid">
+                <div class="api-btn" onclick="testGetProfile()">
+                    👤 Get Profile<br>
+                    <small>Lấy thông tin user</small>
+                </div>
+
+                <div class="api-btn" onclick="testGetFriends()">
+                    👥 Get Friends<br>
+                    <small>Danh sách bạn bè</small>
+                </div>
+
+                <div class="api-btn" onclick="testGetReceivedRequests()">
+                    📥 Get Received<br>
+                    <small>Lời mời đã nhận</small>
+                </div>
+
+                <div class="api-btn" onclick="testGetSentRequests()">
+                    📤 Get Sent<br>
+                    <small>Lời mời đã gửi</small>
+                </div>
+
+                <div class="api-btn" onclick="testGetRecommendations()">
+                    💡 Get Recommendations<br>
+                    <small>Gợi ý bạn bè</small>
+                </div>
+
+                <div class="api-btn" onclick="testGetBlockedUsers()">
+                    🚫 Get Blocked<br>
+                    <small>Danh sách bị chặn</small>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 20px; color: #333; margin-bottom: 15px;">📤 Gửi Lời Mời Kết Bạn</h3>
+            <div class="form-group">
+                <label>Receiver User ID:</label>
+                <input type="text" id="receiverId" placeholder="UUID của user muốn kết bạn">
+            </div>
+            <div class="form-group">
+                <label>Message (tùy chọn):</label>
+                <input type="text" id="message" placeholder="Hi, let's be friends!">
+            </div>
+            <button class="btn" onclick="testSendFriendRequest()">Gửi Lời Mời</button>
+
+            <h3 style="margin-top: 20px; color: #333; margin-bottom: 15px;">✅ Chấp Nhận Lời Mời</h3>
+            <div class="form-group">
+                <label>Request ID:</label>
+                <input type="text" id="requestId" placeholder="ID của lời mời muốn chấp nhận">
+            </div>
+            <button class="btn" onclick="testAcceptRequest()">Chấp Nhận</button>
+            <button class="btn" style="margin-top: 10px; background: #dc3545;" onclick="testRejectRequest()">Từ Chối</button>
+        </div>
+
+        <!-- Response Section -->
+        <div class="response-section">
+            <h2>📊 Response</h2>
+            <div id="statusBox"></div>
+            <div class="response-box" id="responseBox">Chưa có response. Hãy chọn một API để test.</div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = 'https://api.chatify.asia';
+        let authToken = '';
+
+        function displayResponse(data, isError = false) {
+            const responseBox = document.getElementById('responseBox');
+            const statusBox = document.getElementById('statusBox');
+
+            if (isError) {
+                responseBox.style.color = '#ff6b6b';
+                statusBox.innerHTML = '<div class="status error">❌ Lỗi!</div>';
+            } else {
+                responseBox.style.color = '#4CAF50';
+                statusBox.innerHTML = '<div class="status success">✅ Thành công!</div>';
+            }
+
+            responseBox.textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            try {
+                const options = {
+                    method: method,
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                };
+
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                const response = await fetch(`${BASE_URL}${endpoint}`, options);
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayResponse(data, false);
+                } else {
+                    displayResponse(data, true);
+                }
+
+                return data;
+            } catch (error) {
+                displayResponse({ error: error.message }, true);
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                alert('Vui lòng nhập username và password!');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.token) {
+                    authToken = data.token;
+                    document.getElementById('tokenSection').classList.remove('hidden');
+                    document.getElementById('apiTestSection').classList.remove('hidden');
+                    document.getElementById('tokenDisplay').textContent = `${authToken.substring(0, 50)}...`;
+                    displayResponse(data, false);
+                } else {
+                    displayResponse(data, true);
+                    alert('Login thất bại! Kiểm tra lại username/password.');
+                }
+            } catch (error) {
+                displayResponse({ error: error.message }, true);
+            }
+        }
+
+        function copyToken() {
+            navigator.clipboard.writeText(authToken).then(() => {
+                alert('Đã copy token!');
+            }).catch(() => {
+                alert('Không thể copy token. Vui lòng copy từ ô bên trên.');
+            });
+        }
+
+        async function testGetProfile() {
+            await apiCall('/api/users/profile');
+        }
+
+        async function testGetFriends() {
+            await apiCall('/api/friends');
+        }
+
+        async function testGetReceivedRequests() {
+            await apiCall('/api/friends/requests/received');
+        }
+
+        async function testGetSentRequests() {
+            await apiCall('/api/friends/requests/sent');
+        }
+
+        async function testGetRecommendations() {
+            await apiCall('/api/friends/recommendations');
+        }
+
+        async function testGetBlockedUsers() {
+            await apiCall('/api/friends/blocked');
+        }
+
+        async function testSendFriendRequest() {
+            const receiverId = document.getElementById('receiverId').value;
+            const message = document.getElementById('message').value;
+
+            if (!receiverId) {
+                alert('Vui lòng nhập Receiver User ID!');
+                return;
+            }
+
+            await apiCall('/api/friends/request', 'POST', {
+                receiverId,
+                message
+            });
+        }
+
+        async function testAcceptRequest() {
+            const requestId = document.getElementById('requestId').value;
+
+            if (!requestId) {
+                alert('Vui lòng nhập Request ID!');
+                return;
+            }
+
+            await apiCall(`/api/friends/requests/${requestId}/accept`, 'PUT');
+        }
+
+        async function testRejectRequest() {
+            const requestId = document.getElementById('requestId').value;
+
+            if (!requestId) {
+                alert('Vui lòng nhập Request ID!');
+                return;
+            }
+
+            await apiCall(`/api/friends/requests/${requestId}/reject`, 'PUT');
+        }
+    </script>
+</body>
+</html>
+
