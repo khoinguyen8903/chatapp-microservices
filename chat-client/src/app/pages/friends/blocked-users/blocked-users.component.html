@@ -1,0 +1,83 @@
+<div class="blocked-users-container">
+  <!-- Header -->
+  <div class="header">
+    <h1 class="header-title">🚫 Danh sách chặn</h1>
+    <p class="header-subtitle">Quản lý người dùng bạn đã chặn</p>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading-state">
+    <div class="spinner"></div>
+    <p>Đang tải danh sách chặn...</p>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error" class="error-state">
+    <span class="error-icon">⚠️</span>
+    <p>{{ error }}</p>
+    <button class="btn-retry" (click)="loadBlockedUsers()">Thử lại</button>
+  </div>
+
+  <!-- Empty State -->
+  <div *ngIf="!loading && !error && blockedUsers.length === 0" class="empty-state">
+    <span class="empty-icon">🔓</span>
+    <h3>Không có người dùng bị chặn</h3>
+    <p>Danh sách chặn của bạn đang trống</p>
+  </div>
+
+  <!-- Blocked Users List -->
+  <div *ngIf="!loading && !error && blockedUsers.length > 0" class="blocked-list">
+    <div
+      *ngFor="let blockedUser of blockedUsers"
+      class="blocked-card"
+    >
+      <div class="blocked-avatar">
+        <img
+          [src]="getAvatarUrl(blockedUser.blockedAvatarUrl)"
+          [alt]="blockedUser.blockedFullName"
+          class="avatar-image grayscale"
+        />
+        <div class="blocked-badge">🚫</div>
+      </div>
+
+      <div class="blocked-info">
+        <h3 class="blocked-name">{{ blockedUser.blockedFullName || blockedUser.blockedUsername }}</h3>
+        <p class="blocked-username">@{{ blockedUser.blockedUsername }}</p>
+
+        <div *ngIf="blockedUser.reason" class="blocked-reason">
+          <span class="reason-label">📝 Lý do:</span>
+          <span class="reason-text">{{ blockedUser.reason }}</span>
+        </div>
+
+        <div class="blocked-meta">
+          <span class="meta-item">
+            📅 Đã chặn từ: {{ formatDate(blockedUser.createdAt) }}
+          </span>
+        </div>
+      </div>
+
+      <div class="blocked-actions">
+        <button
+          class="btn-unblock"
+          (click)="unblockUser(blockedUser.blockedUserId, blockedUser.blockedUsername)"
+          title="Bỏ chặn người dùng"
+        >
+          <span class="btn-icon">🔓</span>
+          Bỏ chặn
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info Card -->
+  <div *ngIf="!loading && !error" class="info-card">
+    <h4 class="info-title">ℹ️ Về tính năng chặn</h4>
+    <ul class="info-list">
+      <li>Người dùng bị chặn sẽ không thể gửi tin nhắn cho bạn</li>
+      <li>Bạn sẽ không thấy tin nhắn hoặc thông báo từ họ</li>
+      <li>Họ sẽ không thể xem hồ sơ của bạn</li>
+      <li>Bạn có thể bỏ chặn bất cứ lúc nào</li>
+    </ul>
+  </div>
+</div>
+

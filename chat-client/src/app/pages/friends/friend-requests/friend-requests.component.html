@@ -1,0 +1,141 @@
+<div class="friend-requests-container">
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading-state">
+    <div class="spinner"></div>
+    <p>Đang tải lời mời...</p>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error" class="error-state">
+    <span class="error-icon">⚠️</span>
+    <p>{{ error }}</p>
+    <button class="btn-retry" (click)="loadRequests()">Thử lại</button>
+  </div>
+
+  <!-- Content -->
+  <div *ngIf="!loading && !error" class="requests-content">
+    <!-- Received Requests Section -->
+    <div class="requests-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          📨 Lời mời đã nhận
+          <span class="badge">{{ receivedRequests.length }}</span>
+        </h2>
+      </div>
+
+      <div *ngIf="receivedRequests.length === 0" class="empty-state">
+        <span class="empty-icon">📭</span>
+        <h3>Không có lời mời nào</h3>
+        <p>Khi có lời mời kết bạn mới, nó sẽ hiển thị ở đây</p>
+      </div>
+
+      <div *ngIf="receivedRequests.length > 0" class="requests-list">
+        <div
+          *ngFor="let request of receivedRequests"
+          class="request-card received"
+        >
+          <div class="request-avatar">
+            <img
+              [src]="getAvatarUrl(request.senderAvatarUrl)"
+              [alt]="request.senderFullName"
+              class="avatar-image"
+            />
+          </div>
+
+          <div class="request-info">
+            <h3 class="request-name">{{ request.senderFullName || request.senderUsername }}</h3>
+            <p class="request-username">@{{ request.senderUsername }}</p>
+            <p *ngIf="request.message" class="request-message">"{{ request.message }}"</p>
+            <p class="request-date">{{ formatDate(request.createdAt) }}</p>
+          </div>
+
+          <div class="request-actions">
+            <button
+              class="btn-accept"
+              (click)="acceptRequest(request.id)"
+              title="Chấp nhận lời mời"
+            >
+              <span class="btn-icon">✅</span>
+              Chấp nhận
+            </button>
+            <button
+              class="btn-reject"
+              (click)="rejectRequest(request.id)"
+              title="Từ chối lời mời"
+            >
+              <span class="btn-icon">❌</span>
+              Từ chối
+            </button>
+            <button
+              class="btn-profile"
+              (click)="viewProfile(request.senderId)"
+              title="Xem hồ sơ"
+            >
+              <span class="btn-icon">👤</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sent Requests Section -->
+    <div class="requests-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          📤 Lời mời đã gửi
+          <span class="badge">{{ sentRequests.length }}</span>
+        </h2>
+      </div>
+
+      <div *ngIf="sentRequests.length === 0" class="empty-state">
+        <span class="empty-icon">📤</span>
+        <h3>Chưa gửi lời mời nào</h3>
+        <p>Tìm và kết bạn với người dùng mới nhé!</p>
+        <a routerLink="/friends" routerLinkActive="active" class="btn-find-friends">
+          🔍 Tìm bạn mới
+        </a>
+      </div>
+
+      <div *ngIf="sentRequests.length > 0" class="requests-list">
+        <div
+          *ngFor="let request of sentRequests"
+          class="request-card sent"
+        >
+          <div class="request-avatar">
+            <img
+              [src]="'/assets/default-avatar.svg'"
+              [alt]="request.receiverFullName"
+              class="avatar-image"
+            />
+          </div>
+
+          <div class="request-info">
+            <h3 class="request-name">{{ request.receiverFullName || request.receiverUsername }}</h3>
+            <p class="request-username">@{{ request.receiverUsername }}</p>
+            <p *ngIf="request.message" class="request-message">"{{ request.message }}"</p>
+            <p class="request-date">{{ formatDate(request.createdAt) }}</p>
+          </div>
+
+          <div class="request-actions">
+            <button
+              class="btn-cancel"
+              (click)="cancelRequest(request.id)"
+              title="Hủy lời mời"
+            >
+              <span class="btn-icon">❌</span>
+              Hủy
+            </button>
+            <button
+              class="btn-profile"
+              (click)="viewProfile(request.receiverId)"
+              title="Xem hồ sơ"
+            >
+              <span class="btn-icon">👤</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

@@ -1,0 +1,20 @@
+<div class="user-avatar" [class]="getSizeClass()">
+  <ng-container *ngIf="avatarUrl">
+    <img
+      [src]="getAvatarUrl()"
+      [alt]="fullName || username"
+      class="avatar-image"
+    />
+  </ng-container>
+
+  <ng-container *ngIf="!avatarUrl">
+    <div class="avatar-initials">
+      {{ getInitials() }}
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showStatus">
+    <div class="status-indicator" [class]="getStatusClass()"></div>
+  </ng-container>
+</div>
+

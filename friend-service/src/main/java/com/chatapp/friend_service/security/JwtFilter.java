@@ -47,6 +47,8 @@ public class JwtFilter extends OncePerRequestFilter {
             }
         }
 
+        // ✅ IMPORTANT: Always call filterChain to continue request processing
+        // This ensures the request passes through even if authentication fails
         filterChain.doFilter(request, response);
     }
 }

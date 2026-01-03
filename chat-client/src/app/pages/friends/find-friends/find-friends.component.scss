@@ -1,0 +1,195 @@
+/* === FIND FRIENDS CONTAINER === */
+.find-friends-container {
+  @apply min-h-[calc(100vh-350px)];
+}
+
+/* === SEARCH SECTION === */
+.search-section {
+  @apply bg-white rounded-2xl shadow-sm p-6 mb-6;
+}
+
+.search-box-wrapper {
+  @apply relative;
+}
+
+.search-input {
+  @apply w-full px-5 py-4 pr-12 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 outline-none transition-all duration-200 text-gray-700 placeholder-gray-400 text-base;
+}
+
+.clear-search-btn {
+  @apply absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full p-1 transition-all duration-200;
+}
+
+.search-icon {
+  @apply absolute right-14 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none;
+}
+
+.search-hint {
+  @apply text-sm text-gray-500 mt-3;
+}
+
+/* === LOADING & ERROR STATES === */
+.loading-state,
+.error-state {
+  @apply flex flex-col items-center justify-center py-12 text-center;
+}
+
+.spinner {
+  @apply w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4;
+}
+
+.error-icon {
+  @apply text-6xl mb-4;
+}
+
+.error-state p {
+  @apply text-gray-600 mb-4;
+}
+
+.btn-retry {
+  @apply px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-semibold hover:shadow-lg hover:scale-105 transition-all duration-200;
+}
+
+/* === EMPTY STATE === */
+.empty-state {
+  @apply flex flex-col items-center justify-center py-12 text-center;
+}
+
+.empty-icon {
+  @apply text-8xl mb-4 opacity-50;
+}
+
+.empty-state h3 {
+  @apply text-xl font-bold text-gray-800 mb-2;
+}
+
+.empty-state p {
+  @apply text-gray-600;
+}
+
+/* === SECTION === */
+.section {
+  @apply bg-white rounded-2xl shadow-sm p-6 mb-6;
+}
+
+.section-title {
+  @apply text-xl font-bold text-gray-800 mb-6 flex items-center gap-2;
+}
+
+.recommendations-section {
+  @apply mb-0;
+}
+
+/* === USER GRID === */
+.user-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4;
+}
+
+/* === USER CARD === */
+.user-card {
+  @apply bg-gradient-to-br from-gray-50 to-white rounded-xl p-5 flex flex-col gap-3 border-2 border-transparent hover:border-indigo-300 hover:shadow-md transition-all duration-200;
+}
+
+.user-avatar {
+  @apply w-20 h-20 mx-auto rounded-full overflow-hidden shadow-md border-4 border-white ring-2 ring-indigo-100;
+}
+
+.avatar-image {
+  @apply w-full h-full object-cover;
+}
+
+.user-info {
+  @apply flex-1 flex flex-col gap-1 text-center;
+}
+
+.user-name {
+  @apply text-lg font-bold text-gray-800 truncate;
+}
+
+.user-username {
+  @apply text-sm text-indigo-600 font-medium;
+}
+
+.mutual-friends {
+  @apply text-xs text-gray-500;
+}
+
+.recommendation-reason {
+  @apply text-xs text-gray-600 bg-blue-50 rounded-lg px-3 py-1 mt-1;
+}
+
+.reason-label {
+  @apply font-semibold text-blue-600;
+}
+
+.status-badge {
+  @apply inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-semibold;
+}
+
+.badge-friend {
+  @apply bg-green-100 text-green-700;
+}
+
+.badge-pending {
+  @apply bg-orange-100 text-orange-700;
+}
+
+.badge-blocked {
+  @apply bg-red-100 text-red-700;
+}
+
+/* === USER ACTIONS === */
+.user-actions {
+  @apply flex flex-col gap-2 pt-2 border-t border-gray-200;
+}
+
+.btn-request {
+  @apply flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-semibold hover:shadow-lg hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100;
+}
+
+.btn-request.btn-disabled {
+  @apply bg-gray-200 text-gray-500 cursor-not-allowed;
+}
+
+.btn-profile {
+  @apply flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all duration-200;
+}
+
+.btn-icon {
+  @apply text-base;
+}
+
+/* === RESPONSIVE DESIGN === */
+@media (max-width: 768px) {
+  .search-input {
+    @apply py-3 text-sm;
+  }
+
+  .user-grid {
+    @apply grid-cols-1;
+  }
+
+  .user-actions {
+    @apply flex-row;
+  }
+
+  .btn-request,
+  .btn-profile {
+    @apply flex-1;
+  }
+}
+
+/* === ANIMATIONS === */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+

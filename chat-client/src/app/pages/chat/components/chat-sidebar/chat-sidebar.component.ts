@@ -1,7 +1,7 @@
 import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { ChatFacade } from '../../chat.facade';
 import { ChatSession } from '../../../../models/chat.models'; // Kiểm tra lại đường dẫn import này cho đúng project của bạn
 import { CreateGroupModalComponent } from '../create-group-modal/create-group-modal.component';
@@ -10,7 +10,7 @@ import { CreateGroupModalComponent } from '../create-group-modal/create-group-mo
   selector: 'app-chat-sidebar',
   standalone: true,
   // [QUAN TRỌNG] Phải import CreateGroupModalComponent vào đây mới dùng được trong HTML
-  imports: [CommonModule, FormsModule, CreateGroupModalComponent],
+  imports: [CommonModule, FormsModule, RouterModule, CreateGroupModalComponent],
   templateUrl: './chat-sidebar.component.html',
   styleUrls: ['./chat-sidebar.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush  // ✅ OnPush for better performance

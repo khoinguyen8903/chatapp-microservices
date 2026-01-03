@@ -1,0 +1,41 @@
+<div class="request-card" [class.sent]="isSent">
+  <div class="request-avatar">
+    <img
+      [src]="getAvatarUrl()"
+      [alt]="getFullName()"
+      class="avatar-image"
+    />
+  </div>
+
+  <div class="request-info">
+    <h3 class="request-name">{{ getFullName() || getUsername() }}</h3>
+    <p class="request-username">@{{ getUsername() }}</p>
+    <p *ngIf="request.message" class="request-message">"{{ request.message }}"</p>
+    <p class="request-date">{{ formatDate(request.createdAt) }}</p>
+  </div>
+
+  <div class="request-actions">
+    <ng-container *ngIf="!isSent">
+      <button class="btn-accept" (click)="onAccept()" title="Chấp nhận lời mời">
+        <span class="btn-icon">✅</span>
+        Chấp nhận
+      </button>
+      <button class="btn-reject" (click)="onReject()" title="Từ chối lời mời">
+        <span class="btn-icon">❌</span>
+        Từ chối
+      </button>
+    </ng-container>
+
+    <ng-container *ngIf="isSent">
+      <button class="btn-cancel" (click)="onCancel()" title="Hủy lời mời">
+        <span class="btn-icon">❌</span>
+        Hủy
+      </button>
+    </ng-container>
+
+    <button class="btn-profile" (click)="onViewProfile()" title="Xem hồ sơ">
+      <span class="btn-icon">👤</span>
+    </button>
+  </div>
+</div>
+

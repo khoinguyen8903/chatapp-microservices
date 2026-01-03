@@ -1,0 +1,302 @@
+<div class="friends-container">
+  <!-- Header -->
+  <header class="friends-header">
+    <div class="header-content">
+      <h1 class="header-title">👥 Bạn Bè</h1>
+      <div class="header-stats">
+        <span class="stat-badge">{{ totalFriends }} bạn bè</span>
+        <span *ngIf="pendingRequestsCount > 0" class="stat-badge badge-warning">
+          {{ pendingRequestsCount }} lời mời mới
+        </span>
+      </div>
+    </div>
+
+    <!-- Search Box -->
+    <div class="search-box">
+      <input
+        type="text"
+        [(ngModel)]="searchKeyword"
+        placeholder="Tìm kiếm bạn bè..."
+        class="search-input"
+      />
+      <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <div class="friends-tabs">
+    <button
+      class="tab"
+      [class.active]="activeTab === 'friends'"
+      (click)="onTabChange('friends')"
+    >
+      <span class="tab-icon">👥</span>
+      <span class="tab-text">Danh Sách Bạn Bè</span>
+    </button>
+
+    <button
+      class="tab"
+      [class.active]="activeTab === 'requests'"
+      (click)="onTabChange('requests')"
+    >
+      <span class="tab-icon">📨</span>
+      <span class="tab-text">Lời Mời</span>
+      <span *ngIf="pendingRequestsCount > 0" class="badge">
+        {{ pendingRequestsCount }}
+      </span>
+    </button>
+
+    <button
+      class="tab"
+      [class.active]="activeTab === 'find'"
+      (click)="onTabChange('find')"
+    >
+      <span class="tab-icon">🔍</span>
+      <span class="tab-text">Tìm Bạn</span>
+    </button>
+
+    <button
+      class="tab"
+      [class.active]="activeTab === 'blocked'"
+      (click)="onTabChange('blocked')"
+    >
+      <span class="tab-icon">🚫</span>
+      <span class="tab-text">Đã Chặn</span>
+    </button>
+  </div>
+
+  <!-- Content Area -->
+  <div class="friends-content">
+    <!-- Loading State -->
+    <div *ngIf="loading" class="loading-state">
+      <div class="spinner"></div>
+      <p>Đang tải...</p>
+    </div>
+
+    <!-- Error State -->
+    <div *ngIf="error" class="error-state">
+      <span class="error-icon">⚠️</span>
+      <p>{{ error }}</p>
+      <button class="btn-retry" (click)="loadData()">Thử lại</button>
+    </div>
+
+    <!-- Friends List Tab -->
+    <div *ngIf="activeTab === 'friends' && !loading && !error" class="tab-content">
+      <div *ngIf="friends.length === 0" class="empty-state">
+        <span class="empty-icon">👥</span>
+        <h3>Chưa có bạn bè</h3>
+        <p>Bắt đầu kết bạn để trò chuyện và chia sẻ!</p>
+        <button class="btn-primary" (click)="onTabChange('find')">
+          <span class="btn-icon">🔍</span>
+          Tìm bạn mới
+        </button>
+      </div>
+
+      <div *ngIf="friends.length > 0" class="friends-grid">
+        <div
+          *ngFor="let friend of friends"
+          class="friend-card"
+        >
+          <div class="friend-avatar">
+            <img
+              [src]="getAvatarUrl(friend.friendAvatarUrl)"
+              [alt]="friend.friendFullName"
+              class="avatar-image"
+            />
+          </div>
+
+          <div class="friend-info">
+            <h3 class="friend-name">{{ friend.friendFullName || friend.friendUsername }}</h3>
+            <p class="friend-username">@{{ friend.friendUsername }}</p>
+            <p class="friend-status">
+              <span class="status-dot"></span>
+              {{ getStatusText(friend.status) }}
+            </p>
+            <p class="friend-since">Kết bạn từ: {{ formatDate(friend.createdAt) }}</p>
+          </div>
+
+          <div class="friend-actions">
+            <button class="btn-chat" (click)="openChat(friend.friendId)" title="Nhắn tin">
+              <span class="btn-icon">💬</span>
+            </button>
+            <button
+              class="btn-profile"
+              (click)="viewProfile(friend.friendId)"
+              title="Xem hồ sơ"
+            >
+              <span class="btn-icon">👤</span>
+            </button>
+            <button
+              class="btn-block"
+              (click)="blockUser(friend.friendId, friend.friendUsername)"
+              title="Chặn người dùng"
+            >
+              <span class="btn-icon">🚫</span>
+            </button>
+            <button
+              class="btn-unfriend"
+              (click)="unfriend(friend.friendId)"
+              title="Hủy kết bạn"
+            >
+              <span class="btn-icon">🗑️</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Friend Requests Tab -->
+    <div *ngIf="activeTab === 'requests' && !loading && !error" class="tab-content">
+      <div class="requests-section">
+        <h3 class="section-title">Lời mời đã nhận ({{ receivedRequests.length }})</h3>
+
+        <div *ngIf="receivedRequests.length === 0" class="empty-state small">
+          <span class="empty-icon">📭</span>
+          <p>Không có lời mời nào</p>
+        </div>
+
+        <div *ngIf="receivedRequests.length > 0" class="requests-list">
+          <div
+            *ngFor="let request of receivedRequests"
+            class="request-card"
+          >
+            <div class="request-avatar">
+              <img
+                [src]="getAvatarUrl(request.senderAvatarUrl)"
+                [alt]="request.senderFullName"
+                class="avatar-image"
+              />
+            </div>
+
+            <div class="request-info">
+              <h3 class="request-name">{{ request.senderFullName || request.senderUsername }}</h3>
+              <p class="request-username">@{{ request.senderUsername }}</p>
+              <p *ngIf="request.message" class="request-message">"{{ request.message }}"</p>
+              <p class="request-date">{{ formatDate(request.createdAt) }}</p>
+            </div>
+
+            <div class="request-actions">
+              <button
+                class="btn-accept"
+                (click)="acceptRequest(request.id)"
+                title="Chấp nhận"
+              >
+                <span class="btn-icon">✅</span>
+                Chấp nhận
+              </button>
+              <button
+                class="btn-reject"
+                (click)="rejectRequest(request.id)"
+                title="Từ chối"
+              >
+                <span class="btn-icon">❌</span>
+                Từ chối
+              </button>
+              <button
+                class="btn-profile"
+                (click)="viewProfile(request.senderId)"
+                title="Xem hồ sơ"
+              >
+                <span class="btn-icon">👤</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="requests-section">
+        <h3 class="section-title">Lời mời đã gửi ({{ sentRequests.length }})</h3>
+
+        <div *ngIf="sentRequests.length === 0" class="empty-state small">
+          <span class="empty-icon">📤</span>
+          <p>Chưa gửi lời mời nào</p>
+        </div>
+
+        <div *ngIf="sentRequests.length > 0" class="requests-list">
+          <div
+            *ngFor="let request of sentRequests"
+            class="request-card sent"
+          >
+            <div class="request-avatar">
+              <img
+                [src]="getAvatarUrl(request.receiverUsername ? '/assets/default-avatar.svg' : null)"
+                [alt]="request.receiverFullName"
+                class="avatar-image"
+              />
+            </div>
+
+            <div class="request-info">
+              <h3 class="request-name">{{ request.receiverFullName || request.receiverUsername }}</h3>
+              <p class="request-username">@{{ request.receiverUsername }}</p>
+              <p *ngIf="request.message" class="request-message">"{{ request.message }}"</p>
+              <p class="request-date">{{ formatDate(request.createdAt) }}</p>
+            </div>
+
+            <div class="request-actions">
+              <button
+                class="btn-cancel"
+                (click)="cancelRequest(request.id)"
+                title="Hủy lời mời"
+              >
+                <span class="btn-icon">❌</span>
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Find Friends Tab -->
+    <div *ngIf="activeTab === 'find' && !loading && !error" class="tab-content">
+      <app-find-friends></app-find-friends>
+    </div>
+
+    <!-- Blocked Users Tab -->
+    <div *ngIf="activeTab === 'blocked' && !loading && !error" class="tab-content">
+      <div *ngIf="blockedUsers.length === 0" class="empty-state">
+        <span class="empty-icon">🔓</span>
+        <h3>Không có người dùng bị chặn</h3>
+        <p>Danh sách chặn của bạn đang trống.</p>
+      </div>
+
+      <div *ngIf="blockedUsers.length > 0" class="blocked-list">
+        <div
+          *ngFor="let blockedUser of blockedUsers"
+          class="blocked-card"
+        >
+          <div class="blocked-avatar">
+            <img
+              [src]="getAvatarUrl(blockedUser.blockedAvatarUrl)"
+              [alt]="blockedUser.blockedFullName"
+              class="avatar-image grayscale"
+            />
+          </div>
+
+          <div class="blocked-info">
+            <h3 class="blocked-name">{{ blockedUser.blockedFullName || blockedUser.blockedUsername }}</h3>
+            <p class="blocked-username">@{{ blockedUser.blockedUsername }}</p>
+            <p *ngIf="blockedUser.reason" class="blocked-reason">
+              <span class="reason-label">Lý do:</span> {{ blockedUser.reason }}
+            </p>
+            <p class="blocked-since">Đã chặn từ: {{ formatDate(blockedUser.createdAt) }}</p>
+          </div>
+
+          <div class="blocked-actions">
+            <button
+              class="btn-unblock"
+              (click)="unblockUser(blockedUser.blockedUserId)"
+              title="Bỏ chặn"
+            >
+              <span class="btn-icon">🔓</span>
+              Bỏ chặn
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

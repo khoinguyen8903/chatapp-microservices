@@ -1,0 +1,35 @@
+<div class="friend-card">
+  <div class="friend-avatar">
+    <img
+      [src]="getAvatarUrl()"
+      [alt]="friend.friendFullName || friend.friendUsername"
+      class="avatar-image"
+    />
+  </div>
+
+  <div class="friend-info">
+    <h3 class="friend-name">{{ friend.friendFullName || friend.friendUsername }}</h3>
+    <p class="friend-username">@{{ friend.friendUsername }}</p>
+    <p class="friend-status">
+      <span class="status-dot"></span>
+      {{ getStatusText(friend.status) }}
+    </p>
+    <p class="friend-since">Kết bạn từ: {{ formatDate(friend.createdAt) }}</p>
+  </div>
+
+  <div *ngIf="showActions" class="friend-actions">
+    <button class="btn-chat" (click)="onChat()" title="Nhắn tin">
+      <span class="btn-icon">💬</span>
+    </button>
+    <button class="btn-profile" (click)="onViewProfile()" title="Xem hồ sơ">
+      <span class="btn-icon">👤</span>
+    </button>
+    <button class="btn-block" (click)="onBlock()" title="Chặn người dùng">
+      <span class="btn-icon">🚫</span>
+    </button>
+    <button class="btn-unfriend" (click)="onUnfriend()" title="Hủy kết bạn">
+      <span class="btn-icon">🗑️</span>
+    </button>
+  </div>
+</div>
+

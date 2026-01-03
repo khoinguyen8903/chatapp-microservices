@@ -1,0 +1,35 @@
+/* === USER AVATAR === */
+.user-avatar {
+  @apply relative rounded-full overflow-hidden border-2 border-white shadow-md flex-shrink-0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.avatar-image {
+  @apply w-full h-full object-cover;
+}
+
+.avatar-initials {
+  @apply w-full h-full flex items-center justify-center text-white font-bold tracking-wide;
+}
+
+.status-indicator {
+  @apply absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white shadow-sm;
+}
+
+/* Size Variants */
+.user-avatar.w-8 .status-indicator {
+  @apply w-2 h-2;
+}
+
+.user-avatar.w-12 .status-indicator {
+  @apply w-3 h-3;
+}
+
+.user-avatar.w-16 .status-indicator {
+  @apply w-4 h-4;
+}
+
+.user-avatar.w-24 .status-indicator {
+  @apply w-5 h-5;
+}
+

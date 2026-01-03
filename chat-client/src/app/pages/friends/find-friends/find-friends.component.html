@@ -1,0 +1,168 @@
+<div class="find-friends-container">
+  <!-- Search Section -->
+  <div class="search-section">
+    <div class="search-box-wrapper">
+      <input
+        type="text"
+        [(ngModel)]="searchKeyword"
+        (ngModelChange)="onSearchInput($event)"
+        placeholder="Tìm kiếm người dùng (nhập ít nhất 3 ký tự)..."
+        class="search-input"
+      />
+      <button
+        *ngIf="searchKeyword"
+        (click)="clearSearch()"
+        class="clear-search-btn"
+        title="Xóa tìm kiếm"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+    </div>
+
+    <p *ngIf="searchKeyword.length > 0 && searchKeyword.length < 3" class="search-hint">
+      Nhập ít nhất 3 ký tự để tìm kiếm
+    </p>
+  </div>
+
+  <!-- Search Loading State -->
+  <div *ngIf="searchLoading" class="loading-state">
+    <div class="spinner"></div>
+    <p>Đang tìm kiếm...</p>
+  </div>
+
+  <!-- Search Results -->
+  <div *ngIf="searchResults.length > 0 && !searchLoading" class="section">
+    <h2 class="section-title">🔍 Kết quả tìm kiếm ({{ searchResults.length }})</h2>
+
+    <div class="user-grid">
+      <div
+        *ngFor="let user of searchResults"
+        class="user-card"
+      >
+        <div class="user-avatar">
+          <img
+            [src]="getAvatarUrl(user.avatarUrl)"
+            [alt]="user.fullName"
+            class="avatar-image"
+          />
+        </div>
+
+        <div class="user-info">
+          <h3 class="user-name">{{ user.fullName || user.username }}</h3>
+          <p class="user-username">@{{ user.username }}</p>
+          <p *ngIf="user.mutualFriends" class="mutual-friends">
+            {{ user.mutualFriends }} bạn chung
+          </p>
+          <div *ngIf="getStatusText(user)" [class]="getStatusBadgeClass(user)" class="status-badge">
+            {{ getStatusText(user) }}
+          </div>
+        </div>
+
+        <div class="user-actions">
+          <button
+            [class.btn-disabled]="isButtonDisabled(user)"
+            (click)="isButtonDisabled(user) ? null : sendFriendRequest(user.id, user.username)"
+            [disabled]="isButtonDisabled(user)"
+            class="btn-request"
+            [title]="getButtonText(user)"
+          >
+            <span class="btn-icon"></span>
+            {{ getButtonText(user) }}
+          </button>
+          <button
+            class="btn-profile"
+            (click)="viewProfile(user.id)"
+            title="Xem hồ sơ"
+          >
+            <span class="btn-icon">👤</span>
+            Xem hồ sơ
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- No Results -->
+  <div *ngIf="searchKeyword.length >= 3 && searchResults.length === 0 && !searchLoading" class="empty-state">
+    <span class="empty-icon">🔍</span>
+    <h3>Không tìm thấy người dùng nào</h3>
+    <p>Thử từ khóa khác hoặc xem gợi ý bên dưới</p>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error" class="error-state">
+    <span class="error-icon">⚠️</span>
+    <p>{{ error }}</p>
+    <button class="btn-retry" (click)="loadRecommendations()">Thử lại</button>
+  </div>
+
+  <!-- Recommendations Section -->
+  <div *ngIf="!searchKeyword && !error" class="section recommendations-section">
+    <h2 class="section-title">✨ Gợi ý kết bạn</h2>
+
+    <!-- Loading -->
+    <div *ngIf="loading" class="loading-state">
+      <div class="spinner"></div>
+      <p>Đang tải gợi ý...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!loading && recommendations.length === 0" class="empty-state">
+      <span class="empty-icon">👥</span>
+      <h3>Chưa có gợi ý nào</h3>
+      <p>Tìm kiếm người dùng để kết bạn nhé!</p>
+    </div>
+
+    <!-- Recommendations List -->
+    <div *ngIf="!loading && recommendations.length > 0" class="user-grid">
+      <div
+        *ngFor="let rec of recommendations"
+        class="user-card"
+      >
+        <div class="user-avatar">
+          <img
+            [src]="getAvatarUrl(rec.avatarUrl)"
+            [alt]="rec.fullName"
+            class="avatar-image"
+          />
+        </div>
+
+        <div class="user-info">
+          <h3 class="user-name">{{ rec.fullName || rec.username }}</h3>
+          <p class="user-username">@{{ rec.username }}</p>
+          <p *ngIf="rec.mutualFriends" class="mutual-friends">
+            {{ rec.mutualFriends }} bạn chung
+          </p>
+          <p *ngIf="rec.reason" class="recommendation-reason">
+            <span class="reason-label">Gợi ý:</span> {{ rec.reason }}
+          </p>
+        </div>
+
+        <div class="user-actions">
+          <button
+            class="btn-request"
+            (click)="sendFriendRequest(rec.id, rec.username)"
+            title="Gửi lời mời kết bạn"
+          >
+            <span class="btn-icon">📤</span>
+            Gửi lời mời
+          </button>
+          <button
+            class="btn-profile"
+            (click)="viewProfile(rec.id)"
+            title="Xem hồ sơ"
+          >
+            <span class="btn-icon">👤</span>
+            Xem hồ sơ
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
