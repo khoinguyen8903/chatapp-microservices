@@ -1923,47 +1923,74 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     const existingMsg = messages.find(m => m.id === targetMsg.id);
 
     if (existingMsg) {
-      // Message is loaded, scroll to it
+      // Message is loaded, scroll to it immediately
       this.scrollToMessageElement(targetMsg.id!);
     } else {
       // Message not in current view - need to load more history
-      // For now, just show a notification
-      console.log('Message not in current view, loading more history...');
-      // TODO: Implement pagination to load the message's context
-      this.scrollToMessageElement(targetMsg.id!);
+      // Load messages around the target message using pagination
+      this.http.get<ChatMessage[]>(
+        `${environment.apiUrl}/messages/${this.facade.selectedSession()?.id}/around/${targetMsg.id}`
+      ).subscribe({
+        next: (messagesAround) => {
+          if (messagesAround && messagesAround.length > 0) {
+            // MERGE loaded messages with existing messages instead of replacing
+            const currentMessages = this.facade.messages();
+
+            // Create a Set of existing message IDs to avoid duplicates
+            const existingIds = new Set(currentMessages.map(m => m.id));
+
+            // Filter out duplicates from messagesAround
+            const newMessages = messagesAround.filter(m => !existingIds.has(m.id));
+
+            // Combine: existing + new messages around target
+            const mergedMessages = [...currentMessages, ...newMessages];
+
+            // Sort by timestamp to maintain chronological order
+            mergedMessages.sort((a, b) => {
+              const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+              const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+              return timeA - timeB;
+            });
+
+            this.facade.messages.set(mergedMessages);
+
+            // Force change detection to ensure UI updates
+            this.cdr.markForCheck();
+
+            // Scroll to message after DOM update
+            requestAnimationFrame(() => {
+              this.scrollToMessageElement(targetMsg.id!);
+            });
+          }
+        },
+        error: (err) => {
+          console.error('Failed to load messages around target:', err);
+          // Fallback: show notification
+          alert('Không thể tải tin nhắn. Vui lòng thử lại.');
+        }
+      });
     }
   }
 
   private scrollToMessageElement(messageId: string) {
-    setTimeout(() => {
-      const messageElements = document.querySelectorAll('.message-wrapper');
-      let targetElement: HTMLElement | null = null;
-
-      messageElements.forEach((el) => {
-        const msg = this.facade.messages().find(m => {
-          const wrapper = el as HTMLElement;
-          return wrapper.contains(document.querySelector(`[data-message-id="${m.id}"]`));
-        });
-      });
-
-      // Fallback: Find by iterating through messages
-      const messages = this.facade.messages();
-      const index = messages.findIndex(m => m.id === messageId);
-
-      if (index !== -1 && messageElements[index]) {
-        targetElement = messageElements[index] as HTMLElement;
-      }
+    // Sử dụng requestAnimationFrame để tránh blocking UI thread
+    requestAnimationFrame(() => {
+      // Tìm trực tiếp bằng data-message-id attribute - nhanh hơn nhiều
+      const targetElement = document.querySelector(`[data-message-id="${messageId}"]`) as HTMLElement;
 
       if (targetElement) {
-        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Sử dụng behavior: 'auto' thay vì 'smooth' để điều hướng nhanh hơn
+        targetElement.scrollIntoView({ behavior: 'auto', block: 'center' });
 
         // Highlight the message
         targetElement.classList.add('highlight-flash');
         setTimeout(() => {
           targetElement?.classList.remove('highlight-flash');
         }, 2000);
+      } else {
+        console.warn(`[ChatWindow] Message element not found for ID: ${messageId}`);
       }
-    }, 300);
+    });
   }
 
   // =============================================

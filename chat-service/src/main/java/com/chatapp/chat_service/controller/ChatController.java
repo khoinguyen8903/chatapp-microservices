@@ -550,6 +550,34 @@ public class ChatController {
         }
     }
 
+    /**
+     * Get messages around a specific message (for search navigation).
+     * @param chatId - The chat room ID or partner ID
+     * @param messageId - The target message ID
+     * @param before - Number of messages before the target (default: 20)
+     * @param after - Number of messages after the target (default: 20)
+     */
+    @GetMapping("/messages/{chatId}/around/{messageId}")
+    public ResponseEntity<List<ChatMessage>> getMessagesAround(
+            @PathVariable String chatId,
+            @PathVariable String messageId,
+            @RequestParam(defaultValue = "20") int before,
+            @RequestParam(defaultValue = "20") int after) {
+        try {
+            System.out.println("🎯 [ChatController] Getting messages around messageId: " + messageId + 
+                              " in chatId: " + chatId + ", before: " + before + ", after: " + after);
+            
+            List<ChatMessage> messagesAround = chatMessageService.findMessagesAround(chatId, messageId, before, after);
+            
+            System.out.println("✅ [ChatController] Found " + messagesAround.size() + " messages around target");
+            return ResponseEntity.ok(messagesAround);
+        } catch (Exception e) {
+            System.err.println("❌ [ChatController] Error getting messages around: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.ok(new java.util.ArrayList<>());
+        }
+    }
+
     // =============================================
     // MUTE NOTIFICATIONS API
     // =============================================

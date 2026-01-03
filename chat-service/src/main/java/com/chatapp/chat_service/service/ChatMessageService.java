@@ -614,4 +614,65 @@ public class ChatMessageService {
         
         return results;
     }
+
+    /**
+     * Find messages around a specific message for search navigation.
+     * Returns messages before and after the target message.
+     */
+    public List<ChatMessage> findMessagesAround(String chatId, String messageId, int before, int after) {
+        // Find the target message first
+        Optional<ChatMessage> targetOpt = repository.findById(messageId);
+        if (targetOpt.isEmpty()) {
+            System.out.println("⚠️ [ChatMessageService] Target message not found: " + messageId);
+            return new ArrayList<>();
+        }
+
+        ChatMessage target = targetOpt.get();
+        Date targetTimestamp = target.getTimestamp();
+
+        // Find messages before target (older messages)
+        List<ChatMessage> beforeMessages = repository.findByChatIdAndTimestampBeforeOrderByTimestampDesc(
+            chatId, targetTimestamp
+        );
+
+        // Filter out the target message from before list and limit
+        beforeMessages = beforeMessages.stream()
+            .filter(m -> !m.getId().equals(messageId))
+            .limit(before)
+            .collect(Collectors.toList());
+
+        // Find messages after target (newer messages)
+        List<ChatMessage> afterMessages = repository.findByChatIdAndTimestampAfterOrderByTimestampAsc(
+            chatId, targetTimestamp
+        );
+
+        // Filter out the target message from after list and limit
+        afterMessages = afterMessages.stream()
+            .filter(m -> !m.getId().equals(messageId))
+            .limit(after)
+            .collect(Collectors.toList());
+
+        // Combine: messages before (in reverse chronological) + target + messages after
+        List<ChatMessage> result = new ArrayList<>();
+
+        // Add messages before (need to reverse to get chronological order)
+        for (int i = beforeMessages.size() - 1; i >= 0; i--) {
+            result.add(beforeMessages.get(i));
+        }
+
+        // Add target message
+        result.add(target);
+
+        // Add messages after
+        result.addAll(afterMessages);
+
+        // Enrich group messages with sender names
+        Optional<ChatRoom> roomOpt = chatRoomService.findByChatId(chatId);
+        if (roomOpt.isPresent() && roomOpt.get().isGroup()) {
+            enrichMessagesWithSenderNames(result);
+        }
+
+        System.out.println("✅ [ChatMessageService] Found " + result.size() + " messages around target");
+        return result;
+    }
 }

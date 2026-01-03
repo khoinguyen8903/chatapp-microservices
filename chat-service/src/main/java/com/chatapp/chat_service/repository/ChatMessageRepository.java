@@ -6,6 +6,7 @@ import com.chatapp.chat_service.model.ChatMessage;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
+import java.util.Date;
 import java.util.List;
 
 public interface ChatMessageRepository extends MongoRepository<ChatMessage, String> {
@@ -38,4 +39,11 @@ public interface ChatMessageRepository extends MongoRepository<ChatMessage, Stri
     // Text search in content field - requires text index on 'content' field
     @Query("{ '$or': [ {'chatId': ?0}, {'senderId': ?0}, {'recipientId': ?0} ], 'content': { $regex: ?1, $options: 'i' } }")
     List<ChatMessage> searchByContentInChat(String chatId, String keyword, Sort sort);
+
+    // --- [MESSAGES AROUND TARGET] ---
+    // Find messages before a timestamp (older messages), sorted descending
+    List<ChatMessage> findByChatIdAndTimestampBeforeOrderByTimestampDesc(String chatId, Date timestamp);
+
+    // Find messages after a timestamp (newer messages), sorted ascending
+    List<ChatMessage> findByChatIdAndTimestampAfterOrderByTimestampAsc(String chatId, Date timestamp);
 }

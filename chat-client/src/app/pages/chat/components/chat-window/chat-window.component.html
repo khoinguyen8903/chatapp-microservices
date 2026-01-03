@@ -136,6 +136,7 @@
         } @else {
           <article 
             class="message-wrapper"
+            [attr.data-message-id]="msg.id"
             [class.sent]="msg.senderId === facade.currentUser().id"
             [class.received]="msg.senderId !== facade.currentUser().id"
             (contextmenu)="onRightClick($event, msg)"
