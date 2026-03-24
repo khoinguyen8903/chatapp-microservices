@@ -12,6 +12,19 @@
   @apply flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6;
 }
 
+.header-branding {
+  @apply flex items-center gap-2 mb-2;
+}
+
+.brand-icon {
+  @apply text-2xl text-indigo-600;
+}
+
+.brand-text {
+  @apply text-2xl font-extrabold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent;
+  letter-spacing: -0.02em;
+}
+
 .header-title {
   @apply text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent;
 }

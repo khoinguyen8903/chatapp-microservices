@@ -1,6 +1,6 @@
 package com.chatapp.chat_service.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty; // 1. IMPORT THƯ VIỆN NÀY
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,14 +26,13 @@ public class ChatRoom {
     private String senderId;
     private String recipientId;
 
-    // --- [SỬA LỖI TẠI ĐÂY] ---
-    // Ép buộc JSON trả về phải là "isGroup" chứ không được tự đổi thành "group"
+
     @JsonProperty("isGroup")
     private boolean isGroup;
 
     private String groupName;
-    private String adminId;  // [DEPRECATED] Keep for backward compatibility, use ownerId instead
-    private String ownerId;  // [NEW] Owner (Trưởng nhóm) - Only one owner per group
+    private String adminId;
+    private String ownerId;  // [NEW] Owner (Trưởng nhóm)
     @Builder.Default
     private List<String> adminIds = new java.util.ArrayList<>();  // [NEW] List of Admins (Phó nhóm)
     private List<String> memberIds;

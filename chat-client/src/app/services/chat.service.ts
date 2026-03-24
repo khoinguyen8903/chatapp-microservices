@@ -68,7 +68,7 @@ export class ChatService {
       return;
     }
     
-    // 👇 [FIX QUAN TRỌNG NHẤT] Gắn Token vào URL Query Param
+    //  Gắn Token vào URL Query Param
     const token = this.authService.getToken();
     let socketUrl = `${this.apiUrl}/ws`;
     

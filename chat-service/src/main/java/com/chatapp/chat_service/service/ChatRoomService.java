@@ -49,7 +49,7 @@ public class ChatRoomService {
                         System.out.println("✅ [ChatRoomService] Created unique 1-1 room: " + chatId);
                         return Optional.of(chatId);
                     } catch (Exception e) {
-                        // Nếu lỡ có tiến trình khác vừa tạo xong (Duplicate Key), ta lấy cái đã có
+
                         return chatRoomRepository.findByChatId(chatId).map(ChatRoom::getChatId);
                     }
                 });
@@ -68,8 +68,8 @@ public class ChatRoomService {
 
         ChatRoom groupRoom = ChatRoom.builder()
                 .chatId(chatId)
-                .adminId(adminId)  // Keep for backward compatibility
-                .ownerId(adminId)  // [NEW] Set ownerId when creating group
+                .adminId(adminId)
+                .ownerId(adminId)
                 .groupName(groupName)
                 .isGroup(true)
                 .memberIds(memberIds)
