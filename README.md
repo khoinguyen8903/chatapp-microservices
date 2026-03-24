@@ -12,6 +12,8 @@
 
 Official project diagram: Cloudflare Tunnel, Angular + Nginx (port 3000), Spring Cloud Gateway (8080), **Auth** (8081 → PostgreSQL `authdb`), **Chat** (8082 → MongoDB `chatdb`, `/ws`, ties to Auth + Notification), **Media** (8083 → PostgreSQL `mediadb` + MinIO), **Notification** (8084 → Redis + Firebase FCM). The codebase also adds **friend-service** (8085) and real route prefixes via the gateway (e.g. `/api/auth/**`, `/api/v1/media/**` — see [API gateway routes](#api-gateway-routes) below).
 
+The file below must be the **exported architecture diagram** (layers: User → Tunnel → Frontend/Gateway → services → DB/MinIO/Redis/FCM). It is not a UI screenshot and not a photo of the GitHub README preview.
+
 ![System architecture diagram](docs/images/architecture.png)
 
 ### Login
